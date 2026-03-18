@@ -1,8 +1,9 @@
 import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useState } from "react";
+import React from "react";
 import {
+  ActionSheetIOS,
   Alert,
   Platform,
   Pressable,
@@ -15,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
+import type { DownloadQuality, StreamQuality } from "@/context/AppContext";
 
 interface SettingRowProps {
   icon: React.ReactNode;
@@ -85,19 +87,61 @@ function SectionHeader({ title }: { title: string }) {
   return <Text style={styles.sectionHeader}>{title}</Text>;
 }
 
+const STREAM_QUALITY_LABELS: Record<StreamQuality, string> = {
+  auto: "Auto",
+  low: "Low (0.3 GB/hr)",
+  medium: "Medium (0.7 GB/hr)",
+  high: "High (3 GB/hr)",
+  ultra: "Ultra 4K (7 GB/hr)",
+};
+
+const DOWNLOAD_QUALITY_LABELS: Record<DownloadQuality, string> = {
+  standard: "Standard",
+  high: "High",
+  ultra: "Ultra HD",
+};
+
+function showPicker<T extends string>(
+  title: string,
+  options: Record<T, string>,
+  current: T,
+  onSelect: (v: T) => void,
+) {
+  const keys = Object.keys(options) as T[];
+  const labels = keys.map((k) => `${options[k]}${k === current ? " ✓" : ""}`);
+
+  if (Platform.OS === "ios") {
+    ActionSheetIOS.showActionSheetWithOptions(
+      { options: [...labels, "Cancel"], cancelButtonIndex: labels.length, title },
+      (idx) => {
+        if (idx < keys.length) onSelect(keys[idx]);
+      },
+    );
+  } else {
+    Alert.alert(
+      title,
+      undefined,
+      [
+        ...keys.map((k) => ({
+          text: `${options[k]}${k === current ? " ✓" : ""}`,
+          onPress: () => onSelect(k),
+        })),
+        { text: "Cancel", style: "cancel" as const },
+      ],
+    );
+  }
+}
+
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
-  const { myList, clearRecentSearches } = useApp();
+  const {
+    myList,
+    settings,
+    watchedCount,
+    updateSettings,
+    clearRecentSearches,
+  } = useApp();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
-
-  const [autoPlay, setAutoPlay] = useState(true);
-  const [notifications, setNotifications] = useState(true);
-  const [hdr, setHdr] = useState(false);
-  const [dataUsage, setDataUsage] = useState(false);
-  const [downloadOnWifi, setDownloadOnWifi] = useState(true);
-
-  const plan = "Free";
-  const appVersion = "v1";
 
   return (
     <View style={[styles.container, { paddingTop: topInset }]}>
@@ -109,7 +153,6 @@ export default function SettingsScreen() {
           paddingBottom: Platform.OS === "web" ? 34 + 84 : insets.bottom + 100,
         }}
       >
-        {/* Profile Card */}
         <LinearGradient
           colors={[COLORS.primaryDark, "#1a0008"]}
           style={styles.profileCard}
@@ -127,12 +170,8 @@ export default function SettingsScreen() {
               <Text style={[styles.planBadgeText, { color: COLORS.success }]}>Free Forever</Text>
             </View>
           </View>
-          <Pressable style={styles.editProfileBtn}>
-            <Feather name="edit-2" size={16} color={COLORS.text} />
-          </Pressable>
         </LinearGradient>
 
-        {/* Stats Row */}
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{myList.length}</Text>
@@ -140,136 +179,131 @@ export default function SettingsScreen() {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>3</Text>
-            <Text style={styles.statLabel}>Downloads</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>47</Text>
+            <Text style={styles.statValue}>{watchedCount}</Text>
             <Text style={styles.statLabel}>Watched</Text>
           </View>
         </View>
 
-
-        {/* Playback */}
         <SectionHeader title="Playback" />
         <View style={styles.card}>
           <SettingRow
             icon={<Feather name="play-circle" size={18} color={COLORS.textSecondary} />}
             label="Autoplay Next Episode"
             toggle
-            toggleValue={autoPlay}
-            onToggle={setAutoPlay}
+            toggleValue={settings.autoPlayNextEpisode}
+            onToggle={(v) => updateSettings({ autoPlayNextEpisode: v })}
           />
           <View style={styles.divider} />
           <SettingRow
             icon={<MaterialIcons name="hd" size={18} color={COLORS.textSecondary} />}
             label="HDR Playback"
             toggle
-            toggleValue={hdr}
-            onToggle={setHdr}
+            toggleValue={settings.hdrPlayback}
+            onToggle={(v) => updateSettings({ hdrPlayback: v })}
           />
           <View style={styles.divider} />
           <SettingRow
             icon={<Feather name="wifi" size={18} color={COLORS.textSecondary} />}
             label="Stream Quality"
-            value="Auto"
+            value={STREAM_QUALITY_LABELS[settings.streamQuality]}
             onPress={() =>
-              Alert.alert("Quality", "Auto\nLow (0.3GB/hr)\nMedium (0.7GB/hr)\nHigh (3GB/hr)\nUltra 4K (7GB/hr)")
+              showPicker(
+                "Stream Quality",
+                STREAM_QUALITY_LABELS,
+                settings.streamQuality,
+                (v) => updateSettings({ streamQuality: v }),
+              )
             }
           />
         </View>
 
-        {/* Downloads */}
         <SectionHeader title="Downloads" />
         <View style={styles.card}>
           <SettingRow
             icon={<Feather name="wifi" size={18} color={COLORS.textSecondary} />}
             label="Download on Wi-Fi Only"
             toggle
-            toggleValue={downloadOnWifi}
-            onToggle={setDownloadOnWifi}
+            toggleValue={settings.downloadOnWifiOnly}
+            onToggle={(v) => updateSettings({ downloadOnWifiOnly: v })}
           />
           <View style={styles.divider} />
           <SettingRow
             icon={<Feather name="film" size={18} color={COLORS.textSecondary} />}
             label="Download Quality"
-            value="High"
-            onPress={() => Alert.alert("Quality", "Standard\nHigh\nUltra HD")}
-          />
-          <View style={styles.divider} />
-          <SettingRow
-            icon={<Feather name="hard-drive" size={18} color={COLORS.textSecondary} />}
-            label="Storage Used"
-            value="3.6 GB"
+            value={DOWNLOAD_QUALITY_LABELS[settings.downloadQuality]}
+            onPress={() =>
+              showPicker(
+                "Download Quality",
+                DOWNLOAD_QUALITY_LABELS,
+                settings.downloadQuality,
+                (v) => updateSettings({ downloadQuality: v }),
+              )
+            }
           />
         </View>
 
-        {/* Notifications */}
         <SectionHeader title="Notifications" />
         <View style={styles.card}>
           <SettingRow
             icon={<Ionicons name="notifications-outline" size={18} color={COLORS.textSecondary} />}
             label="Push Notifications"
             toggle
-            toggleValue={notifications}
-            onToggle={setNotifications}
-          />
-          <View style={styles.divider} />
-          <SettingRow
-            icon={<Feather name="bell" size={18} color={COLORS.textSecondary} />}
-            label="New Releases"
-            badge="NEW"
-            onPress={() => {}}
+            toggleValue={settings.pushNotifications}
+            onToggle={(v) => updateSettings({ pushNotifications: v })}
           />
         </View>
 
-        {/* Privacy */}
         <SectionHeader title="Privacy & Data" />
         <View style={styles.card}>
           <SettingRow
             icon={<Feather name="bar-chart-2" size={18} color={COLORS.textSecondary} />}
             label="Reduce Data Usage"
             toggle
-            toggleValue={dataUsage}
-            onToggle={setDataUsage}
+            toggleValue={settings.reduceDataUsage}
+            onToggle={(v) => updateSettings({ reduceDataUsage: v })}
           />
           <View style={styles.divider} />
           <SettingRow
             icon={<Feather name="search" size={18} color={COLORS.textSecondary} />}
             label="Clear Search History"
             onPress={() => {
-              clearRecentSearches();
-              Alert.alert("Done", "Search history cleared.");
+              Alert.alert(
+                "Clear History",
+                "Are you sure you want to clear your search history?",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Clear",
+                    style: "destructive",
+                    onPress: () => {
+                      clearRecentSearches();
+                      Alert.alert("Done", "Search history cleared.");
+                    },
+                  },
+                ],
+              );
             }}
           />
           <View style={styles.divider} />
           <SettingRow
             icon={<Feather name="lock" size={18} color={COLORS.textSecondary} />}
             label="Privacy Policy"
-            onPress={() => Alert.alert("Privacy", "View privacy policy")}
+            onPress={() => Alert.alert("Privacy Policy", "JMH STREAM does not collect or share any personal data. All preferences are stored locally on your device.")}
           />
         </View>
 
-        {/* App */}
         <SectionHeader title="App" />
         <View style={styles.card}>
           <SettingRow
             icon={<Feather name="info" size={18} color={COLORS.textSecondary} />}
             label="App Version"
-            value="v1"
-          />
-          <View style={styles.divider} />
-          <SettingRow
-            icon={<Feather name="star" size={18} color={COLORS.textSecondary} />}
-            label="Rate JMH STREAM"
-            onPress={() => Alert.alert("Rate", "Opening App Store...")}
+            value="v1.0.0"
           />
           <View style={styles.divider} />
           <SettingRow
             icon={<Feather name="help-circle" size={18} color={COLORS.textSecondary} />}
             label="Help & Support"
-            onPress={() => Alert.alert("Support", "Opening support...")}
+            onPress={() => Alert.alert("Support", "For help and feedback, visit our GitHub repository.")}
           />
         </View>
 
@@ -342,14 +376,6 @@ const styles = StyleSheet.create({
     color: "#FFD700",
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
-  },
-  editProfileBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
   },
   statsRow: {
     flexDirection: "row",

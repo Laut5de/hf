@@ -16,6 +16,7 @@ import {
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "@/constants/colors";
+import { useApp } from "@/context/AppContext";
 import {
   ApiCaption,
   ApiSourceDownload,
@@ -81,6 +82,8 @@ export default function PlayerScreen() {
   const { id, title } = useLocalSearchParams<{ id: string; title: string }>();
   const insets = useSafeAreaInsets();
   const videoRef = useRef<Video>(null);
+  const { settings, incrementWatched } = useApp();
+  const hasTrackedWatch = useRef(false);
 
   const [sources, setSources] = useState<ApiSourcesData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -107,16 +110,38 @@ export default function PlayerScreen() {
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    hasTrackedWatch.current = false;
+  }, [id]);
+
+  useEffect(() => {
     (async () => {
       setLoading(true);
       setError(false);
       const data = await fetchSources(id as string);
       if (data && data.downloads.length > 0) {
         setSources(data);
-        const best = data.downloads.reduce((a, b) =>
-          a.resolution > b.resolution ? a : b
-        );
-        setSelectedQuality(best);
+
+        const qualityMap: Record<string, number> = {
+          low: 360,
+          medium: 480,
+          high: 1080,
+          ultra: 2160,
+        };
+        const preferred = qualityMap[settings.streamQuality] || 0;
+        let pick: ApiSourceDownload;
+        if (settings.streamQuality === "auto" || preferred === 0) {
+          pick = data.downloads.reduce((a, b) =>
+            a.resolution > b.resolution ? a : b
+          );
+        } else {
+          const sorted = [...data.downloads].sort(
+            (a, b) =>
+              Math.abs(a.resolution - preferred) - Math.abs(b.resolution - preferred)
+          );
+          pick = sorted[0];
+        }
+        setSelectedQuality(pick);
+
         const enCaption = data.captions.find((c) => c.lan === "en");
         if (enCaption) {
           setSelectedCaption(enCaption);
@@ -127,7 +152,7 @@ export default function PlayerScreen() {
       }
       setLoading(false);
     })();
-  }, [id]);
+  }, [id, settings.streamQuality]);
 
   useEffect(() => {
     if (!selectedCaption || !captionsEnabled) {
@@ -276,6 +301,15 @@ export default function PlayerScreen() {
           setDurationMs(status.durationMillis || 0);
           setIsBuffering(status.isBuffering || false);
           setIsPlaying(status.isPlaying);
+          if (
+            !hasTrackedWatch.current &&
+            status.durationMillis &&
+            status.positionMillis &&
+            status.positionMillis > status.durationMillis * 0.1
+          ) {
+            hasTrackedWatch.current = true;
+            incrementWatched();
+          }
         }}
         onError={() => setError(true)}
       />
