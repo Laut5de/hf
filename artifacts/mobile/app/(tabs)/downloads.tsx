@@ -73,7 +73,7 @@ export default function DownloadsScreen() {
         <View style={styles.storageLegend}>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: COLORS.primary }]} />
-            <Text style={styles.legendText}>StreamX {totalSize.toFixed(1)} GB</Text>
+            <Text style={styles.legendText}>JMH STREAM {totalSize.toFixed(1)} GB</Text>
           </View>
           <Text style={styles.storageAvail}>16 GB total</Text>
         </View>

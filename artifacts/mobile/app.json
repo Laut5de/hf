@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "StreamX",
+    "name": "JMH STREAM",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "streamx",
+    "scheme": "jmhstream",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
@@ -15,14 +15,14 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.streamx.app"
+      "bundleIdentifier": "com.jmhstream.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#0A0A0F"
       },
-      "package": "com.streamx.app"
+      "package": "com.jmhstream.app"
     },
     "web": {
       "favicon": "./assets/images/icon.png"

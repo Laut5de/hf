@@ -67,7 +67,7 @@ jobs:
       - name: Build Android APK (Preview)
         if: ${{ github.event.inputs.profile != 'production' }}
         working-directory: artifacts/mobile
-        run: eas build --platform android --profile preview --non-interactive --output ./build/streamx-preview.apk
+        run: eas build --platform android --profile preview --non-interactive --output ./build/jmhstream-preview.apk
 
       - name: Build Android AAB (Production)
         if: ${{ github.event.inputs.profile == 'production' }}
@@ -78,8 +78,8 @@ jobs:
         if: ${{ github.event.inputs.profile != 'production' }}
         uses: actions/upload-artifact@v4
         with:
-          name: streamx-android-apk
-          path: artifacts/mobile/build/streamx-preview.apk
+          name: jmhstream-android-apk
+          path: artifacts/mobile/build/jmhstream-preview.apk
           retention-days: 30
 
       - name: Comment on PR with build link

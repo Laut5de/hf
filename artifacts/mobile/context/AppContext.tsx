@@ -23,8 +23,8 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | null>(null);
 
-const WATCHLIST_KEY = "streamx_watchlist";
-const SEARCHES_KEY = "streamx_recent_searches";
+const WATCHLIST_KEY = "jmhstream_watchlist";
+const SEARCHES_KEY = "jmhstream_recent_searches";
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [watchlist, setWatchlist] = useState<string[]>([]);

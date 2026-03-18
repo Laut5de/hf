@@ -96,8 +96,8 @@ export default function SettingsScreen() {
   const [dataUsage, setDataUsage] = useState(false);
   const [downloadOnWifi, setDownloadOnWifi] = useState(true);
 
-  const plan = "Premium 4K";
-  const renewDate = "April 18, 2026";
+  const plan = "Free";
+  const appVersion = "v1";
 
   return (
     <View style={[styles.container, { paddingTop: topInset }]}>
@@ -121,10 +121,10 @@ export default function SettingsScreen() {
           </View>
           <View style={styles.profileInfo}>
             <Text style={styles.profileName}>User Profile</Text>
-            <Text style={styles.profileEmail}>user@streamx.app</Text>
+            <Text style={styles.profileEmail}>JMH STREAM v1</Text>
             <View style={styles.planBadge}>
-              <Ionicons name="diamond" size={11} color="#FFD700" />
-              <Text style={styles.planBadgeText}>{plan}</Text>
+              <Ionicons name="infinite" size={12} color={COLORS.success} />
+              <Text style={[styles.planBadgeText, { color: COLORS.success }]}>Free Forever</Text>
             </View>
           </View>
           <Pressable style={styles.editProfileBtn}>
@@ -150,29 +150,6 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Subscription */}
-        <SectionHeader title="Subscription" />
-        <View style={styles.card}>
-          <SettingRow
-            icon={<Ionicons name="diamond" size={18} color="#FFD700" />}
-            label="Current Plan"
-            value={plan}
-            onPress={() => Alert.alert("Plan", `${plan}\nRenews: ${renewDate}`)}
-          />
-          <View style={styles.divider} />
-          <SettingRow
-            icon={<Feather name="calendar" size={18} color={COLORS.textSecondary} />}
-            label="Next Renewal"
-            value={renewDate}
-          />
-          <View style={styles.divider} />
-          <SettingRow
-            icon={<Feather name="credit-card" size={18} color={COLORS.textSecondary} />}
-            label="Payment Method"
-            value="•••• 4242"
-            onPress={() => Alert.alert("Payment", "Manage payment methods")}
-          />
-        </View>
 
         {/* Playback */}
         <SectionHeader title="Playback" />
@@ -280,12 +257,12 @@ export default function SettingsScreen() {
           <SettingRow
             icon={<Feather name="info" size={18} color={COLORS.textSecondary} />}
             label="App Version"
-            value="2.1.0"
+            value="v1"
           />
           <View style={styles.divider} />
           <SettingRow
             icon={<Feather name="star" size={18} color={COLORS.textSecondary} />}
-            label="Rate StreamX"
+            label="Rate JMH STREAM"
             onPress={() => Alert.alert("Rate", "Opening App Store...")}
           />
           <View style={styles.divider} />
@@ -296,18 +273,6 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {/* Sign Out */}
-        <View style={[styles.card, { marginBottom: 12 }]}>
-          <SettingRow
-            icon={<Feather name="log-out" size={18} color={COLORS.error} />}
-            label="Sign Out"
-            danger
-            onPress={() => Alert.alert("Sign Out", "Are you sure?", [
-              { text: "Cancel", style: "cancel" },
-              { text: "Sign Out", style: "destructive" },
-            ])}
-          />
-        </View>
       </ScrollView>
     </View>
   );

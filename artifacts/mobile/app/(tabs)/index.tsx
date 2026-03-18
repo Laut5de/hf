@@ -72,7 +72,7 @@ export default function HomeScreen() {
 
       {/* Fixed top bar */}
       <View style={[styles.topBar, { paddingTop: topInset }]}>
-        <Text style={styles.logo}>STREAMX</Text>
+        <Text style={styles.logo}>JMH STREAM</Text>
         <View style={styles.topActions}>
           <TouchableOpacity
             style={styles.topBtn}
