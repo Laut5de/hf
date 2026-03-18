@@ -116,6 +116,7 @@ Expo/React Native mobile streaming app called "JMH STREAM". Dark cinematic theme
   - Detail screen "My List" button saves complete media info (poster, title, genre, rating, etc.)
   - My List screen shows saved items with posters, genres, ratings, remove option
 - **State**: React Query for API data caching (12-hour staleTime + gcTime, persisted to AsyncStorage); AsyncStorage for My List/recent searches
+- **Language Toggle**: Detail page shows English/French toggle when alternate version exists; searches API with `[version française]` tag; navigates to French content's different subjectId
 - **Splash Screen**: Animated splash with Reanimated — glowing red JMH STREAM logo + tagline, auto-dismisses after ~2.6s
 - **Detail Page Trailer**: Inline trailer player with play/pause, mute toggle, poster overlay, Netflix-style controls
 - **Image Optimization**: `expo-image` with `cachePolicy="memory-disk"`, `recyclingKey`, `priority="high"` on banner/backdrop

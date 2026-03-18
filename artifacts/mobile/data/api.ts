@@ -150,6 +150,34 @@ export async function fetchSources(movieId: string): Promise<ApiSourcesData | nu
   }
 }
 
+export async function fetchFrenchVersion(title: string): Promise<ApiSubject | null> {
+  try {
+    const cleanTitle = title.replace(/\s*\[version française\]/i, "").trim();
+    const query = `${cleanTitle} [version française]`;
+    const res = await fetch(`${BASE_URL}/search/${encodeURIComponent(query)}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (json.status !== "success") return null;
+    const items: ApiSubject[] = json.data?.items ?? json.data?.subjectList ?? [];
+    const match = items.find(
+      (item) =>
+        item.title.toLowerCase().includes("[version française]") &&
+        item.title.toLowerCase().includes(cleanTitle.toLowerCase().split(":")[0].trim())
+    );
+    return match || null;
+  } catch {
+    return null;
+  }
+}
+
+export function isFrenchVersion(title: string): boolean {
+  return /\[version française\]/i.test(title);
+}
+
+export function cleanFrenchTitle(title: string): string {
+  return title.replace(/\s*\[version française\]/i, "").trim();
+}
+
 export function formatDuration(seconds: number): string {
   if (!seconds || seconds <= 0) return "";
   const h = Math.floor(seconds / 3600);

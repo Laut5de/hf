@@ -25,7 +25,17 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
-import { ApiSubject, fetchInfo, formatDuration, getGenres, getYear } from "@/data/api";
+import {
+  ApiSubject,
+  cleanFrenchTitle,
+  fetchFrenchVersion,
+  fetchInfo,
+  fetchSearch,
+  formatDuration,
+  getGenres,
+  getYear,
+  isFrenchVersion,
+} from "@/data/api";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const BACKDROP_HEIGHT = 320;
@@ -48,6 +58,52 @@ export default function DetailScreen() {
     queryFn: () => fetchInfo(id as string),
     enabled: !!id,
   });
+
+  const currentTitle = (apiData as any)?.subject?.title || (apiData as any)?.title || "";
+  const isCurrentFrench = isFrenchVersion(currentTitle);
+
+  const { data: altLangData } = useQuery({
+    queryKey: ["alt-lang", id, currentTitle],
+    queryFn: async () => {
+      if (!currentTitle) return null;
+      try {
+        if (isCurrentFrench) {
+          const cleanTitle = cleanFrenchTitle(currentTitle);
+          const results = await fetchSearch(cleanTitle);
+          const match = results.find(
+            (item) =>
+              !isFrenchVersion(item.title) &&
+              item.title.toLowerCase().includes(cleanTitle.toLowerCase().split(":")[0].trim()) &&
+              item.subjectId !== id
+          );
+          return match || null;
+        } else {
+          return fetchFrenchVersion(currentTitle);
+        }
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!currentTitle && currentTitle.length > 0,
+  });
+
+  const handleTrailerToggle = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      if (trailerPlaying) {
+        await trailerRef.current?.pauseAsync();
+        setTrailerPlaying(false);
+      } else {
+        await trailerRef.current?.playAsync();
+        setTrailerPlaying(true);
+      }
+    } catch {}
+  }, [trailerPlaying]);
+
+  const handleTrailerMute = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setTrailerMuted((m) => !m);
+  }, []);
 
   if (isLoading) {
     return (
@@ -74,7 +130,8 @@ export default function DetailScreen() {
   const resource = (apiData as any).resource || {};
   const resourceSeasons = resource.seasons || [];
 
-  const title = subject.title || "";
+  const rawTitle = subject.title || "";
+  const title = isCurrentFrench ? cleanFrenchTitle(rawTitle) : rawTitle;
   const coverUrl = subject.cover?.url || "";
   const coverBlur = subject.cover?.blurHash || "";
   const stillsUrl = subject.stills?.url || subject.trailer?.cover?.url || coverUrl;
@@ -89,24 +146,6 @@ export default function DetailScreen() {
   const trailerUrl = subject.trailer?.videoAddress?.url || "";
   const trailerCoverUrl = subject.trailer?.cover?.url || "";
   const trailerDuration = subject.trailer?.videoAddress?.duration || 0;
-
-  const handleTrailerToggle = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    try {
-      if (trailerPlaying) {
-        await trailerRef.current?.pauseAsync();
-        setTrailerPlaying(false);
-      } else {
-        await trailerRef.current?.playAsync();
-        setTrailerPlaying(true);
-      }
-    } catch {}
-  }, [trailerPlaying]);
-
-  const handleTrailerMute = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setTrailerMuted((m) => !m);
-  }, []);
 
   const handleMyList = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -138,7 +177,16 @@ export default function DetailScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push({
       pathname: "/player",
-      params: { id: id as string, title: title },
+      params: { id: id as string, title },
+    });
+  };
+
+  const handleSwitchLanguage = () => {
+    if (!altLangData) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.replace({
+      pathname: "/detail/[id]",
+      params: { id: altLangData.subjectId },
     });
   };
 
@@ -208,6 +256,50 @@ export default function DetailScreen() {
 
         <Animated.View entering={FadeIn.delay(200)} style={styles.content}>
           <Text style={styles.title}>{title}</Text>
+
+          {altLangData && (
+            <Animated.View entering={FadeIn.delay(250)} style={styles.langRow}>
+              <View style={styles.langToggle}>
+                <Pressable
+                  style={[
+                    styles.langOption,
+                    !isCurrentFrench && styles.langOptionActive,
+                  ]}
+                  onPress={isCurrentFrench ? handleSwitchLanguage : undefined}
+                >
+                  <Text
+                    style={[
+                      styles.langOptionText,
+                      !isCurrentFrench && styles.langOptionTextActive,
+                    ]}
+                  >
+                    🇬🇧 English
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.langOption,
+                    isCurrentFrench && styles.langOptionActive,
+                  ]}
+                  onPress={!isCurrentFrench ? handleSwitchLanguage : undefined}
+                >
+                  <Text
+                    style={[
+                      styles.langOptionText,
+                      isCurrentFrench && styles.langOptionTextActive,
+                    ]}
+                  >
+                    🇫🇷 Français
+                  </Text>
+                </Pressable>
+              </View>
+              {isCurrentFrench && (
+                <View style={styles.langBadge}>
+                  <Text style={styles.langBadgeText}>VF</Text>
+                </View>
+              )}
+            </Animated.View>
+          )}
 
           <View style={styles.metaRow}>
             {rating && parseFloat(rating) > 0 && (
@@ -555,6 +647,48 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontSize: 12,
     fontFamily: "Inter_500Medium",
+  },
+  langRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  langToggle: {
+    flexDirection: "row",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 20,
+    padding: 3,
+  },
+  langOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 17,
+  },
+  langOptionActive: {
+    backgroundColor: COLORS.primary,
+  },
+  langOptionText: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+  },
+  langOptionTextActive: {
+    color: COLORS.text,
+    fontFamily: "Inter_600SemiBold",
+  },
+  langBadge: {
+    backgroundColor: COLORS.accent,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  langBadgeText: {
+    color: "#000",
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 1,
   },
   actions: {
     gap: 10,
