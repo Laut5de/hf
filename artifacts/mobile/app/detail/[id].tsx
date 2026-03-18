@@ -1,10 +1,12 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Dimensions,
   Platform,
   Pressable,
@@ -21,80 +23,50 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
-import { Episode, Season } from "@/data/mockData";
+import { fetchInfo, formatDuration, getGenres, getYear } from "@/data/api";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const BACKDROP_HEIGHT = 320;
 
-function EpisodeItem({
-  episode,
-  onPress,
-}: {
-  episode: Episode;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable style={styles.episodeItem} onPress={onPress}>
-      <View style={styles.episodeThumbnailContainer}>
-        <Image
-          source={{ uri: episode.thumbnail }}
-          style={styles.episodeThumbnail}
-          contentFit="cover"
-          transition={200}
-        />
-        {episode.isWatched ? (
-          <View style={styles.watchedOverlay}>
-            <Ionicons name="checkmark-circle" size={22} color={COLORS.success} />
-          </View>
-        ) : (
-          <View style={styles.playOverlay}>
-            <Ionicons name="play-circle" size={28} color={COLORS.text} />
-          </View>
-        )}
-        {episode.watchProgress !== undefined && episode.watchProgress > 0 && (
-          <View style={styles.epProgressBar}>
-            <View
-              style={[
-                styles.epProgressFill,
-                { width: `${episode.watchProgress * 100}%` },
-              ]}
-            />
-          </View>
-        )}
-      </View>
-      <View style={styles.episodeInfo}>
-        <View style={styles.episodeHeader}>
-          <Text style={styles.episodeNum}>E{episode.episodeNumber}</Text>
-          <Text style={styles.episodeDuration}>{episode.duration}</Text>
-        </View>
-        <Text style={styles.episodeTitle} numberOfLines={1}>
-          {episode.title}
-        </Text>
-        <Text style={styles.episodeDesc} numberOfLines={2}>
-          {episode.description}
-        </Text>
-      </View>
-      <Feather name="download" size={18} color={COLORS.textMuted} />
-    </Pressable>
-  );
-}
-
 export default function DetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const { getMediaById, isInWatchlist, addToWatchlist, removeFromWatchlist } =
-    useApp();
-
-  const media = getMediaById(id as string);
-  const [selectedSeason, setSelectedSeason] = useState<Season | undefined>(
-    media?.seasons?.[0]
-  );
+  const { isInWatchlist, addToWatchlist, removeFromWatchlist } = useApp();
   const [showFullDesc, setShowFullDesc] = useState(false);
+  const [selectedSeasonIdx, setSelectedSeasonIdx] = useState(0);
 
-  const inWatchlist = isInWatchlist(id as string);
   const topInset = Platform.OS === "web" ? 67 : insets.top;
+  const inWatchlist = isInWatchlist(id as string);
 
-  if (!media) {
+  const { data: apiData, isLoading } = useQuery({
+    queryKey: ["info", id],
+    queryFn: () => fetchInfo(id as string),
+    enabled: !!id,
+  });
+
+  const handleWatchlist = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (inWatchlist) {
+      removeFromWatchlist(id as string);
+    } else {
+      addToWatchlist(id as string);
+    }
+  };
+
+  const handlePlay = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
+  if (!apiData) {
     return (
       <View style={styles.notFound}>
         <Text style={styles.notFoundText}>Content not found</Text>
@@ -105,27 +77,47 @@ export default function DetailScreen() {
     );
   }
 
-  const handleWatchlist = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (inWatchlist) {
-      removeFromWatchlist(media.id);
-    } else {
-      addToWatchlist(media.id);
-    }
-  };
+  const subject = (apiData as any).subject || apiData;
+  const stars = (apiData as any).stars || [];
+  const resource = (apiData as any).resource || {};
+  const resourceSeasons = resource.seasons || [];
 
-  const handlePlay = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  };
-
-  const handleEpisodePlay = (episode: Episode) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
+  const title = subject.title || "";
+  const coverUrl = subject.cover?.url || "";
+  const coverBlur = subject.cover?.blurHash || "";
+  const stillsUrl = subject.stills?.url || subject.trailer?.cover?.url || coverUrl;
+  const descriptionText = subject.description || "";
+  const genres = getGenres(subject.genre || "");
+  const year = getYear(subject.releaseDate || "");
+  const rating = subject.imdbRatingValue;
+  const country = subject.countryName || "";
+  const isSeries = subject.subjectType === 2;
+  const duration = formatDuration(subject.duration || 0);
 
   const description =
-    showFullDesc || media.description.length < 120
-      ? media.description
-      : media.description.slice(0, 120) + "...";
+    showFullDesc || descriptionText.length < 120
+      ? descriptionText
+      : descriptionText.slice(0, 120) + "...";
+
+  const castNames = stars
+    .filter((s: any) => s.staffType === 1)
+    .slice(0, 6)
+    .map((s: any) => s.name);
+  const directorName = stars
+    .filter((s: any) => s.staffType === 2)
+    .map((s: any) => s.name);
+
+  const seasonTitles: string[] = [];
+  const seasonEpisodeCounts: number[] = [];
+  if (isSeries && resourceSeasons.length > 0) {
+    resourceSeasons.forEach((s: any) => {
+      const seasonNum = s.se || 1;
+      seasonTitles.push(`Season ${seasonNum}`);
+      seasonEpisodeCounts.push(s.maxEp || s.allEp || 0);
+    });
+  }
+
+  const currentEpisodeCount = seasonEpisodeCounts[selectedSeasonIdx] || 0;
 
   return (
     <View style={styles.container}>
@@ -135,13 +127,13 @@ export default function DetailScreen() {
           paddingBottom: Platform.OS === "web" ? 34 : insets.bottom + 20,
         }}
       >
-        {/* Backdrop */}
         <View style={[styles.backdropContainer, { height: BACKDROP_HEIGHT + topInset }]}>
           <Image
-            source={{ uri: media.backdrop }}
+            source={{ uri: stillsUrl }}
             style={styles.backdrop}
             contentFit="cover"
             transition={400}
+            placeholder={coverBlur ? { blurhash: coverBlur } : undefined}
           />
           <LinearGradient
             colors={["transparent", COLORS.background]}
@@ -152,7 +144,6 @@ export default function DetailScreen() {
             style={styles.backdropTopGradient}
           />
 
-          {/* Back Button */}
           <Pressable
             style={[styles.backBtn, { top: topInset + 12 }]}
             onPress={() => router.back()}
@@ -160,73 +151,52 @@ export default function DetailScreen() {
             <Feather name="arrow-left" size={22} color={COLORS.text} />
           </Pressable>
 
-          {/* More options */}
-          <Pressable
-            style={[styles.moreBtn, { top: topInset + 12 }]}
-          >
+          <Pressable style={[styles.moreBtn, { top: topInset + 12 }]}>
             <Feather name="more-horizontal" size={22} color={COLORS.text} />
           </Pressable>
         </View>
 
-        {/* Content */}
-        <Animated.View
-          entering={FadeIn.delay(200)}
-          style={styles.content}
-        >
-          {/* Title & Meta */}
-          <Text style={styles.title}>{media.title}</Text>
+        <Animated.View entering={FadeIn.delay(200)} style={styles.content}>
+          <Text style={styles.title}>{title}</Text>
 
           <View style={styles.metaRow}>
-            {media.matchPercentage && (
-              <Text style={styles.matchText}>{media.matchPercentage}% Match</Text>
+            {rating && parseFloat(rating) > 0 && (
+              <View style={styles.scoreRow}>
+                <Text style={styles.scoreStar}>★</Text>
+                <Text style={styles.scoreValue}>{parseFloat(rating).toFixed(1)} IMDb</Text>
+              </View>
             )}
-            <Text style={styles.metaText}>{media.year}</Text>
-            <View style={styles.ratingBadge}>
-              <Text style={styles.ratingText}>{media.rating}</Text>
-            </View>
+            {year ? <Text style={styles.metaText}>{year}</Text> : null}
+            {country ? <Text style={styles.metaText}>{country}</Text> : null}
             <Text style={styles.metaText}>
-              {media.type === "series"
-                ? `${media.seasons?.length} Season${(media.seasons?.length ?? 0) > 1 ? "s" : ""}`
-                : media.duration}
+              {isSeries ? "Series" : duration || "Movie"}
             </Text>
-            <View style={styles.scoreRow}>
-              <Text style={styles.scoreStar}>★</Text>
-              <Text style={styles.scoreValue}>{media.score.toFixed(1)}</Text>
-            </View>
           </View>
 
-          {/* Genre Tags */}
           <View style={styles.genreRow}>
-            {media.genre.map((g) => (
+            {genres.map((g) => (
               <View key={g} style={styles.genreTag}>
                 <Text style={styles.genreTagText}>{g}</Text>
               </View>
             ))}
           </View>
 
-          {/* Action Buttons */}
           <Animated.View entering={SlideInDown.delay(300)} style={styles.actions}>
             <Pressable style={styles.playBtn} onPress={handlePlay}>
               <Ionicons name="play" size={20} color="#000" />
-              <Text style={styles.playBtnText}>
-                {media.watchProgress ? "Resume" : "Play"}
-              </Text>
+              <Text style={styles.playBtnText}>Play</Text>
             </Pressable>
 
-            {media.type === "series" && (
+            {isSeries && (
               <Pressable style={styles.downloadBtn}>
                 <Feather name="download" size={18} color={COLORS.text} />
-                <Text style={styles.downloadBtnText}>Download S1</Text>
+                <Text style={styles.downloadBtnText}>Download</Text>
               </Pressable>
             )}
           </Animated.View>
 
-          {/* Icon Actions */}
           <View style={styles.iconActions}>
-            <TouchableOpacity
-              style={styles.iconAction}
-              onPress={handleWatchlist}
-            >
+            <TouchableOpacity style={styles.iconAction} onPress={handleWatchlist}>
               <Ionicons
                 name={inWatchlist ? "checkmark-circle" : "add-circle-outline"}
                 size={24}
@@ -247,7 +217,7 @@ export default function DetailScreen() {
               <Text style={styles.iconActionText}>Share</Text>
             </TouchableOpacity>
 
-            {media.type === "series" && (
+            {isSeries && (
               <TouchableOpacity style={styles.iconAction}>
                 <MaterialCommunityIcons
                   name="progress-download"
@@ -259,90 +229,123 @@ export default function DetailScreen() {
             )}
           </View>
 
-          {/* Description */}
-          <Pressable onPress={() => setShowFullDesc((s) => !s)}>
-            <Text style={styles.description}>{description}</Text>
-            {media.description.length > 120 && (
-              <Text style={styles.moreText}>
-                {showFullDesc ? "Less" : "More"}
-              </Text>
-            )}
-          </Pressable>
+          {descriptionText.length > 0 && (
+            <Pressable onPress={() => setShowFullDesc((s) => !s)}>
+              <Text style={styles.description}>{description}</Text>
+              {descriptionText.length > 120 && (
+                <Text style={styles.moreText}>
+                  {showFullDesc ? "Less" : "More"}
+                </Text>
+              )}
+            </Pressable>
+          )}
 
-          {/* Cast & Crew */}
-          <View style={styles.castSection}>
-            <View style={styles.castRow}>
-              <Text style={styles.castLabel}>Cast:</Text>
-              <Text style={styles.castValue} numberOfLines={1}>
-                {media.cast.join(", ")}
-              </Text>
+          {(castNames.length > 0 || directorName.length > 0) && (
+            <View style={styles.castSection}>
+              {castNames.length > 0 && (
+                <View style={styles.castRow}>
+                  <Text style={styles.castLabel}>Cast:</Text>
+                  <Text style={styles.castValue} numberOfLines={2}>
+                    {castNames.join(", ")}
+                  </Text>
+                </View>
+              )}
+              {directorName.length > 0 && (
+                <View style={styles.castRow}>
+                  <Text style={styles.castLabel}>Director:</Text>
+                  <Text style={styles.castValue}>{directorName.join(", ")}</Text>
+                </View>
+              )}
             </View>
-            {media.director && (
-              <View style={styles.castRow}>
-                <Text style={styles.castLabel}>Director:</Text>
-                <Text style={styles.castValue}>{media.director}</Text>
-              </View>
-            )}
-          </View>
+          )}
 
-          {/* Episodes Section for Series */}
-          {media.type === "series" && media.seasons && (
+          {stars.length > 0 && (
+            <View style={styles.starsSection}>
+              <Text style={styles.sectionTitle}>Cast</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.starsRow}>
+                {stars.slice(0, 10).map((star: any, idx: number) => (
+                  <View key={star.staffId || idx} style={styles.starItem}>
+                    <Image
+                      source={{ uri: star.avatarUrl || "" }}
+                      style={styles.starAvatar}
+                      contentFit="cover"
+                      transition={200}
+                    />
+                    <Text style={styles.starName} numberOfLines={1}>{star.name}</Text>
+                    {star.character ? (
+                      <Text style={styles.starCharacter} numberOfLines={1}>{star.character}</Text>
+                    ) : null}
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {seasonTitles.length > 0 && (
             <View style={styles.episodesSection}>
               <View style={styles.episodesHeader}>
                 <Text style={styles.episodesTitle}>Episodes</Text>
 
-                {/* Season Selector */}
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.seasonSelector}
                 >
-                  {media.seasons.map((season) => (
+                  {seasonTitles.map((sTitle, idx) => (
                     <Pressable
-                      key={season.id}
+                      key={idx}
                       style={[
                         styles.seasonPill,
-                        selectedSeason?.id === season.id && styles.seasonPillActive,
+                        selectedSeasonIdx === idx && styles.seasonPillActive,
                       ]}
                       onPress={() => {
                         Haptics.selectionAsync();
-                        setSelectedSeason(season);
+                        setSelectedSeasonIdx(idx);
                       }}
                     >
                       <Text
                         style={[
                           styles.seasonPillText,
-                          selectedSeason?.id === season.id &&
-                            styles.seasonPillTextActive,
+                          selectedSeasonIdx === idx && styles.seasonPillTextActive,
                         ]}
                       >
-                        Season {season.seasonNumber}
+                        {sTitle}
                       </Text>
                     </Pressable>
                   ))}
                 </ScrollView>
               </View>
 
-              {/* Episode List */}
               <View style={styles.episodeList}>
-                {selectedSeason?.episodes.map((episode) => (
-                  <EpisodeItem
-                    key={episode.id}
-                    episode={episode}
-                    onPress={() => handleEpisodePlay(episode)}
-                  />
+                {Array.from({ length: currentEpisodeCount }, (_, idx) => (
+                  <Pressable
+                    key={idx}
+                    style={styles.episodeItem}
+                    onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+                  >
+                    <View style={styles.episodeThumbnailContainer}>
+                      <Image
+                        source={{ uri: stillsUrl || coverUrl }}
+                        style={styles.episodeThumbnail}
+                        contentFit="cover"
+                        transition={200}
+                      />
+                      <View style={styles.playOverlay}>
+                        <Ionicons name="play-circle" size={28} color={COLORS.text} />
+                      </View>
+                    </View>
+                    <View style={styles.episodeInfo}>
+                      <Text style={styles.episodeNum}>E{idx + 1}</Text>
+                      <Text style={styles.episodeTitle} numberOfLines={1}>
+                        Episode {idx + 1}
+                      </Text>
+                    </View>
+                    <Feather name="download" size={18} color={COLORS.textMuted} />
+                  </Pressable>
                 ))}
               </View>
             </View>
           )}
-
-          {/* More Like This */}
-          <View style={styles.moreLikeThis}>
-            <Text style={styles.moreLikeTitle}>More Like This</Text>
-            <Text style={styles.moreLikeHint}>
-              Based on {media.genre[0]} content you've watched
-            </Text>
-          </View>
         </Animated.View>
       </ScrollView>
     </View>
@@ -353,6 +356,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+  },
+  loadingText: {
+    color: COLORS.textMuted,
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
   },
   backdropContainer: {
     position: "relative",
@@ -415,27 +430,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     flexWrap: "wrap",
   },
-  matchText: {
-    color: COLORS.success,
-    fontSize: 13,
-    fontFamily: "Inter_700Bold",
-  },
   metaText: {
     color: COLORS.textSecondary,
     fontSize: 13,
     fontFamily: "Inter_400Regular",
-  },
-  ratingBadge: {
-    borderWidth: 1,
-    borderColor: COLORS.textMuted,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 3,
-  },
-  ratingText: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
   },
   scoreRow: {
     flexDirection: "row",
@@ -553,6 +551,41 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     flex: 1,
   },
+  starsSection: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    color: COLORS.text,
+    fontSize: 17,
+    fontFamily: "Inter_700Bold",
+    marginBottom: 12,
+  },
+  starsRow: {
+    gap: 14,
+  },
+  starItem: {
+    alignItems: "center",
+    width: 70,
+  },
+  starAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.backgroundCard,
+    marginBottom: 6,
+  },
+  starName: {
+    color: COLORS.text,
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    textAlign: "center",
+  },
+  starCharacter: {
+    color: COLORS.textMuted,
+    fontSize: 10,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+  },
   episodesSection: {
     marginBottom: 28,
   },
@@ -612,31 +645,15 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  watchedOverlay: {
-    position: "absolute",
-    inset: 0,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
   playOverlay: {
     position: "absolute",
-    inset: 0,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.2)",
-  },
-  epProgressBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 3,
-    backgroundColor: "rgba(255,255,255,0.2)",
-  },
-  epProgressFill: {
-    height: "100%",
-    backgroundColor: COLORS.primary,
   },
   episodeInfo: {
     flex: 1,
@@ -661,26 +678,6 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 14,
     fontFamily: "Inter_600SemiBold",
-  },
-  episodeDesc: {
-    color: COLORS.textMuted,
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    lineHeight: 17,
-  },
-  moreLikeThis: {
-    marginBottom: 20,
-  },
-  moreLikeTitle: {
-    color: COLORS.text,
-    fontSize: 20,
-    fontFamily: "Inter_700Bold",
-    marginBottom: 6,
-  },
-  moreLikeHint: {
-    color: COLORS.textMuted,
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
   },
   notFound: {
     flex: 1,

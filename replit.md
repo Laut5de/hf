@@ -94,3 +94,19 @@ Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHea
 ### `scripts` (`@workspace/scripts`)
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+
+### `artifacts/mobile` (`@workspace/mobile`)
+
+Expo/React Native mobile streaming app called "JMH STREAM". Dark cinematic theme with Netflix-style UI.
+
+- **External API**: Uses `apii.freehandyflix.online` for real content
+  - `GET /api/homepage` — Hero banner + content rows (Popular Series, Popular Movies, K-Drama, Anime, etc.)
+  - `GET /api/search/:query` — Search movies/series
+  - `GET /api/info/:subjectId` — Movie/series detail (cast, episodes, description)
+  - `GET /api/trending` — Trending content
+- **API Layer**: `data/api.ts` — fetch functions + TypeScript types for the API
+- **Components**: `ApiBanner.tsx` (hero carousel), `ApiMediaCard.tsx` (poster card), `ApiMediaRow.tsx` (horizontal row)
+- **Navigation**: Uses `subjectId` (numeric) for routing to detail screen
+- **State**: React Query for API data caching; AsyncStorage for watchlist/recent searches
+- **Design**: Background `#0A0A0F`, primary `#E50914`, Inter font family, reanimated animations
+- **Bundle ID**: `com.jmhstream.app`

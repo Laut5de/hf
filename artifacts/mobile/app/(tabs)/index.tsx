@@ -1,11 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Image } from "expo-image";
+import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { useRef } from "react";
 import {
+  ActivityIndicator,
   Animated as RNAnimated,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,24 +13,22 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { HeroBanner } from "@/components/HeroBanner";
-import { MediaRow } from "@/components/MediaRow";
+import { ApiBanner } from "@/components/ApiBanner";
+import { ApiMediaRow } from "@/components/ApiMediaRow";
 import { COLORS } from "@/constants/colors";
-import { useApp } from "@/context/AppContext";
-import {
-  ALL_MEDIA,
-  CATEGORIES,
-  CONTINUE_WATCHING,
-  FEATURED_MEDIA,
-} from "@/data/mockData";
+import { fetchHomepage } from "@/data/api";
 
 const HEADER_SCROLL_THRESHOLD = 80;
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { watchlist } = useApp();
   const scrollY = useRef(new RNAnimated.Value(0)).current;
-  const [activeGenre, setActiveGenre] = useState("All");
+
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ["homepage"],
+    queryFn: fetchHomepage,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const headerOpacity = scrollY.interpolate({
     inputRange: [0, HEADER_SCROLL_THRESHOLD],
@@ -38,26 +36,17 @@ export default function HomeScreen() {
     extrapolate: "clamp",
   });
 
-  const genres = ["All", "Series", "Movies", "Sci-Fi", "Thriller", "Action"];
-
-  const watchlistMedia = ALL_MEDIA.filter((m) => watchlist.includes(m.id));
-
-  const filteredCategories = CATEGORIES.map((cat) => ({
-    ...cat,
-    items: activeGenre === "All"
-      ? cat.items
-      : activeGenre === "Series"
-      ? cat.items.filter((i) => i.type === "series")
-      : activeGenre === "Movies"
-      ? cat.items.filter((i) => i.type === "movie")
-      : cat.items.filter((i) => i.genre.includes(activeGenre)),
-  })).filter((cat) => cat.items.length > 0);
-
   const topInset = Platform.OS === "web" ? 67 : insets.top;
+
+  const operatingList = data?.operatingList || [];
+  const bannerOp = operatingList.find((op) => op.type === "BANNER" && op.banner?.items?.length);
+  const bannerItems = bannerOp?.banner?.items?.slice(0, 8) || [];
+  const subjectRows = operatingList.filter(
+    (op) => op.type === "SUBJECTS_MOVIE" && op.subjects.length > 0
+  );
 
   return (
     <View style={styles.container}>
-      {/* Animated solid header */}
       <RNAnimated.View
         style={[
           styles.stickyHeader,
@@ -65,12 +54,11 @@ export default function HomeScreen() {
             paddingTop: topInset,
             backgroundColor: COLORS.background,
             opacity: headerOpacity,
-            pointerEvents: "none",
+            pointerEvents: "none" as const,
           },
         ]}
       />
 
-      {/* Fixed top bar */}
       <View style={[styles.topBar, { paddingTop: topInset }]}>
         <Text style={styles.logo}>JMH STREAM</Text>
         <View style={styles.topActions}>
@@ -80,70 +68,50 @@ export default function HomeScreen() {
           >
             <Ionicons name="search" size={22} color={COLORS.text} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.avatarBtn}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>U</Text>
-            </View>
-          </TouchableOpacity>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>U</Text>
+          </View>
         </View>
       </View>
 
-      <RNAnimated.ScrollView
-        style={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        onScroll={RNAnimated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: false }
-        )}
-        scrollEventThrottle={16}
-        contentContainerStyle={{ paddingBottom: Platform.OS === "web" ? 34 + 84 : insets.bottom + 100 }}
-      >
-        <HeroBanner items={FEATURED_MEDIA} topInset={topInset} />
-
-        {/* Genre Pills */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.genrePills}
-          style={styles.genreScroll}
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.loadingContainer}>
+          <Ionicons name="cloud-offline-outline" size={48} color={COLORS.textMuted} />
+          <Text style={styles.errorTitle}>Failed to load</Text>
+          <Text style={styles.errorText}>Check your connection and try again</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => refetch()}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <RNAnimated.ScrollView
+          style={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          onScroll={RNAnimated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: false }
+          )}
+          scrollEventThrottle={16}
+          contentContainerStyle={{ paddingBottom: Platform.OS === "web" ? 34 + 84 : insets.bottom + 100 }}
         >
-          {genres.map((g) => (
-            <Pressable
-              key={g}
-              style={[styles.pill, activeGenre === g && styles.pillActive]}
-              onPress={() => setActiveGenre(g)}
-            >
-              <Text
-                style={[
-                  styles.pillText,
-                  activeGenre === g && styles.pillTextActive,
-                ]}
-              >
-                {g}
-              </Text>
-            </Pressable>
+          {bannerItems.length > 0 && (
+            <ApiBanner items={bannerItems} topInset={topInset} />
+          )}
+
+          {subjectRows.map((row, index) => (
+            <ApiMediaRow
+              key={`${row.title}-${index}`}
+              title={row.title}
+              items={row.subjects}
+            />
           ))}
-        </ScrollView>
-
-        {/* Continue Watching */}
-        {CONTINUE_WATCHING.length > 0 && (
-          <MediaRow
-            title="Continue Watching"
-            items={CONTINUE_WATCHING}
-            showProgress
-          />
-        )}
-
-        {/* My List */}
-        {watchlistMedia.length > 0 && (
-          <MediaRow title="My List" items={watchlistMedia} />
-        )}
-
-        {/* Category Rows */}
-        {filteredCategories.map((cat) => (
-          <MediaRow key={cat.id} title={cat.title} items={cat.items} />
-        ))}
-      </RNAnimated.ScrollView>
+        </RNAnimated.ScrollView>
+      )}
     </View>
   );
 }
@@ -190,7 +158,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarBtn: {},
   avatar: {
     width: 32,
     height: 32,
@@ -207,33 +174,39 @@ const styles = StyleSheet.create({
   scroll: {
     flex: 1,
   },
-  genreScroll: {
-    marginBottom: 20,
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
   },
-  genrePills: {
-    paddingHorizontal: 16,
-    gap: 8,
-    paddingVertical: 4,
+  loadingText: {
+    color: COLORS.textMuted,
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
   },
-  pill: {
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: "rgba(255,255,255,0.05)",
-  },
-  pillActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  pillText: {
-    color: COLORS.textSecondary,
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-  },
-  pillTextActive: {
+  errorTitle: {
     color: COLORS.text,
-    fontFamily: "Inter_700Bold",
+    fontSize: 18,
+    fontFamily: "Inter_600SemiBold",
+  },
+  errorText: {
+    color: COLORS.textMuted,
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    paddingHorizontal: 40,
+  },
+  retryBtn: {
+    marginTop: 8,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryText: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
   },
 });
