@@ -25,6 +25,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
+import { useDownloads } from "@/context/DownloadContext";
 import {
   ApiSubject,
   cleanFrenchTitle,
@@ -44,6 +45,7 @@ export default function DetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { isInMyList, addToMyList, removeFromMyList } = useApp();
+  const { isDownloaded, isDownloading, getDownloadProgress, startDownload } = useDownloads();
   const [showFullDesc, setShowFullDesc] = useState(false);
   const [selectedSeasonIdx, setSelectedSeasonIdx] = useState(0);
   const [trailerPlaying, setTrailerPlaying] = useState(false);
@@ -178,6 +180,23 @@ export default function DetailScreen() {
     router.push({
       pathname: "/player",
       params: { id: id as string, title },
+    });
+  };
+
+  const downloaded = isDownloaded(id as string);
+  const downloading = isDownloading(id as string);
+  const dlProgress = getDownloadProgress(id as string);
+
+  const handleDownload = () => {
+    if (downloaded || downloading) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    startDownload({
+      subjectId: id as string,
+      title,
+      coverUrl: subject.cover?.url || "",
+      coverBlurHash: subject.cover?.blurHash,
+      genre: subject.genre || "",
+      duration: subject.duration || 0,
     });
   };
 
@@ -329,12 +348,35 @@ export default function DetailScreen() {
               <Text style={styles.playBtnText}>Play</Text>
             </Pressable>
 
-            {isSeries && (
-              <Pressable style={styles.downloadBtn}>
-                <Feather name="download" size={18} color={COLORS.text} />
-                <Text style={styles.downloadBtnText}>Download</Text>
-              </Pressable>
-            )}
+            <Pressable
+              style={[
+                styles.downloadBtn,
+                downloaded && { borderColor: COLORS.success },
+              ]}
+              onPress={handleDownload}
+              disabled={downloading}
+            >
+              {downloading ? (
+                <>
+                  <ActivityIndicator size="small" color={COLORS.primary} />
+                  <Text style={styles.downloadBtnText}>
+                    {Math.round(dlProgress * 100)}%
+                  </Text>
+                </>
+              ) : downloaded ? (
+                <>
+                  <Ionicons name="checkmark-circle" size={18} color={COLORS.success} />
+                  <Text style={[styles.downloadBtnText, { color: COLORS.success }]}>
+                    Downloaded
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Feather name="download" size={18} color={COLORS.text} />
+                  <Text style={styles.downloadBtnText}>Download</Text>
+                </>
+              )}
+            </Pressable>
           </Animated.View>
 
           <View style={styles.iconActions}>

@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 import type { DownloadQuality, StreamQuality } from "@/context/AppContext";
+import { useDownloads } from "@/context/DownloadContext";
 
 interface SettingRowProps {
   icon: React.ReactNode;
@@ -141,7 +142,16 @@ export default function SettingsScreen() {
     updateSettings,
     clearRecentSearches,
   } = useApp();
+  const { downloads, totalStorageUsed } = useDownloads();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
+
+  const formatStorage = (bytes: number) => {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+  };
 
   return (
     <View style={[styles.container, { paddingTop: topInset }]}>
@@ -181,6 +191,16 @@ export default function SettingsScreen() {
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{watchedCount}</Text>
             <Text style={styles.statLabel}>Watched</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{downloads.length}</Text>
+            <Text style={styles.statLabel}>Downloads</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{formatStorage(totalStorageUsed)}</Text>
+            <Text style={styles.statLabel}>Storage</Text>
           </View>
         </View>
 

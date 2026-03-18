@@ -79,7 +79,7 @@ function parseSrt(srtText: string): SrtCue[] {
 }
 
 export default function PlayerScreen() {
-  const { id, title } = useLocalSearchParams<{ id: string; title: string }>();
+  const { id, title, localPath } = useLocalSearchParams<{ id: string; title: string; localPath?: string }>();
   const insets = useSafeAreaInsets();
   const videoRef = useRef<Video>(null);
   const { settings, incrementWatched } = useApp();
@@ -117,6 +117,20 @@ export default function PlayerScreen() {
     (async () => {
       setLoading(true);
       setError(false);
+
+      if (localPath) {
+        const localSource: ApiSourceDownload = {
+          id: "local",
+          resolution: 0,
+          size: "0",
+          url: localPath,
+        };
+        setSelectedQuality(localSource);
+        setSources({ downloads: [localSource], captions: [] });
+        setLoading(false);
+        return;
+      }
+
       const data = await fetchSources(id as string);
       if (data && data.downloads.length > 0) {
         setSources(data);
@@ -152,7 +166,7 @@ export default function PlayerScreen() {
       }
       setLoading(false);
     })();
-  }, [id, settings.streamQuality]);
+  }, [id, localPath, settings.streamQuality]);
 
   useEffect(() => {
     if (!selectedCaption || !captionsEnabled) {

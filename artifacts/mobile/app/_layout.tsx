@@ -19,6 +19,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { SplashAnimation } from "@/components/SplashAnimation";
 import { COLORS } from "@/constants/colors";
 import { AppProvider } from "@/context/AppContext";
+import { DownloadProvider } from "@/context/DownloadContext";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -125,16 +126,18 @@ export default function RootLayout() {
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <AppProvider>
-            <GestureHandlerRootView style={{ flex: 1 }}>
-              <KeyboardProvider>
-                <View style={styles.root}>
-                  <RootLayoutNav />
-                  {showSplash && (
-                    <SplashAnimation onFinish={() => setShowSplash(false)} />
-                  )}
-                </View>
-              </KeyboardProvider>
-            </GestureHandlerRootView>
+            <DownloadProvider>
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <KeyboardProvider>
+                  <View style={styles.root}>
+                    <RootLayoutNav />
+                    {showSplash && (
+                      <SplashAnimation onFinish={() => setShowSplash(false)} />
+                    )}
+                  </View>
+                </KeyboardProvider>
+              </GestureHandlerRootView>
+            </DownloadProvider>
           </AppProvider>
         </QueryClientProvider>
       </ErrorBoundary>

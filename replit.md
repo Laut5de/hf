@@ -112,9 +112,16 @@ Expo/React Native mobile streaming app called "JMH STREAM". Dark cinematic theme
   - Custom overlay controls: play/pause, seek bar, skip ±10s, auto-hide after 4s
   - Sources fetched from `GET /api/sources/:movieId`
 - **My List**: Saves full `ApiSubject` data to AsyncStorage (key: `jmhstream_mylist`)
-  - Tab renamed from "Downloads" to "My List" with bookmark icon
   - Detail screen "My List" button saves complete media info (poster, title, genre, rating, etc.)
-  - My List screen shows saved items with posters, genres, ratings, remove option
+  - Library screen shows saved items with posters, genres, ratings, remove option
+- **Downloads**: Full offline download system using `expo-file-system/legacy` + `expo-sharing`
+  - `context/DownloadContext.tsx` — download manager with progress tracking, pause/cancel, file persistence
+  - Downloads stored in app's document directory; metadata persisted to AsyncStorage (`jmhstream_downloads`)
+  - Detail page download button with progress indicator (%), downloaded checkmark state
+  - Library tab has "My List" / "Downloads" toggle — downloads show quality badge, file size, share/delete actions
+  - Player supports local file playback via `localPath` param
+  - Settings respect `downloadOnWifiOnly` and `downloadQuality` (standard=480p, high=720p, ultra=1080p)
+  - Profile stats show Downloads count + Storage used (real values from downloaded files)
 - **State**: React Query for API data caching (12-hour staleTime + gcTime, persisted to AsyncStorage); AsyncStorage for My List/recent searches
 - **Language Toggle**: Detail page shows English/French toggle when alternate version exists; searches API with `[version française]` tag; navigates to French content's different subjectId
 - **Splash Screen**: Animated splash with Reanimated — glowing red JMH STREAM logo + tagline, auto-dismisses after ~2.6s
