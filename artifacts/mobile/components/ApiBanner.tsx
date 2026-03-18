@@ -62,8 +62,11 @@ function HeroItem({ item, topInset }: { item: ApiBannerItem; topInset: number })
         source={{ uri: item.image?.url }}
         style={styles.heroImage}
         contentFit="cover"
-        transition={600}
+        transition={400}
         placeholder={item.image?.blurHash ? { blurhash: item.image.blurHash } : undefined}
+        cachePolicy="memory-disk"
+        recyclingKey={`banner-${item.subjectId}`}
+        priority="high"
       />
       <LinearGradient
         colors={["transparent", "rgba(10,10,15,0.4)", COLORS.background]}

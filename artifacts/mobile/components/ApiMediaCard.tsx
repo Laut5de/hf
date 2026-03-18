@@ -54,8 +54,10 @@ export function ApiMediaCard({
           source={{ uri: item.cover?.url }}
           style={styles.image}
           contentFit="cover"
-          transition={300}
+          transition={200}
           placeholder={item.cover?.blurHash ? { blurhash: item.cover.blurHash } : undefined}
+          cachePolicy="memory-disk"
+          recyclingKey={item.subjectId}
         />
         <LinearGradient
           colors={["transparent", "rgba(10,10,15,0.9)"]}

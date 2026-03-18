@@ -103,6 +103,8 @@ export default function MyListScreen() {
                       contentFit="cover"
                       transition={200}
                       placeholder={item.cover.blurHash ? { blurhash: item.cover.blurHash } : undefined}
+                      cachePolicy="memory-disk"
+                      recyclingKey={`mylist-${item.subjectId}`}
                     />
                     {isSeries && (
                       <View style={styles.typeBadge}>

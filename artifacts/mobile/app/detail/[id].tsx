@@ -1,10 +1,11 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
+import { ResizeMode, Video } from "expo-av";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -18,6 +19,7 @@ import {
 } from "react-native";
 import Animated, {
   FadeIn,
+  FadeInDown,
   SlideInDown,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -34,6 +36,9 @@ export default function DetailScreen() {
   const { isInMyList, addToMyList, removeFromMyList } = useApp();
   const [showFullDesc, setShowFullDesc] = useState(false);
   const [selectedSeasonIdx, setSelectedSeasonIdx] = useState(0);
+  const [trailerPlaying, setTrailerPlaying] = useState(false);
+  const [trailerMuted, setTrailerMuted] = useState(true);
+  const trailerRef = useRef<Video>(null);
 
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const inMyList = isInMyList(id as string);
@@ -80,6 +85,28 @@ export default function DetailScreen() {
   const country = subject.countryName || "";
   const isSeries = subject.subjectType === 2;
   const duration = formatDuration(subject.duration || 0);
+
+  const trailerUrl = subject.trailer?.videoAddress?.url || "";
+  const trailerCoverUrl = subject.trailer?.cover?.url || "";
+  const trailerDuration = subject.trailer?.videoAddress?.duration || 0;
+
+  const handleTrailerToggle = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      if (trailerPlaying) {
+        await trailerRef.current?.pauseAsync();
+        setTrailerPlaying(false);
+      } else {
+        await trailerRef.current?.playAsync();
+        setTrailerPlaying(true);
+      }
+    } catch {}
+  }, [trailerPlaying]);
+
+  const handleTrailerMute = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setTrailerMuted((m) => !m);
+  }, []);
 
   const handleMyList = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -153,8 +180,10 @@ export default function DetailScreen() {
             source={{ uri: stillsUrl }}
             style={styles.backdrop}
             contentFit="cover"
-            transition={400}
+            transition={300}
             placeholder={coverBlur ? { blurhash: coverBlur } : undefined}
+            cachePolicy="memory-disk"
+            priority="high"
           />
           <LinearGradient
             colors={["transparent", COLORS.background]}
@@ -229,25 +258,9 @@ export default function DetailScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.iconAction}>
-              <Feather name="thumbs-up" size={22} color={COLORS.text} />
-              <Text style={styles.iconActionText}>Rate</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.iconAction}>
               <Feather name="share-2" size={22} color={COLORS.text} />
               <Text style={styles.iconActionText}>Share</Text>
             </TouchableOpacity>
-
-            {isSeries && (
-              <TouchableOpacity style={styles.iconAction}>
-                <MaterialCommunityIcons
-                  name="progress-download"
-                  size={23}
-                  color={COLORS.text}
-                />
-                <Text style={styles.iconActionText}>Download</Text>
-              </TouchableOpacity>
-            )}
           </View>
 
           {descriptionText.length > 0 && (
@@ -280,6 +293,58 @@ export default function DetailScreen() {
             </View>
           )}
 
+          {trailerUrl.length > 0 && (
+            <Animated.View entering={FadeInDown.delay(400)} style={styles.trailerSection}>
+              <Text style={styles.sectionTitle}>Trailer</Text>
+              <View style={styles.trailerContainer}>
+                <Video
+                  ref={trailerRef}
+                  source={{ uri: trailerUrl }}
+                  style={styles.trailerVideo}
+                  resizeMode={ResizeMode.COVER}
+                  shouldPlay={false}
+                  isLooping
+                  isMuted={trailerMuted}
+                  posterSource={{ uri: trailerCoverUrl }}
+                  usePoster
+                  posterStyle={styles.trailerPoster}
+                  onPlaybackStatusUpdate={(status) => {
+                    if (!status.isLoaded) return;
+                    if (status.didJustFinish) setTrailerPlaying(false);
+                  }}
+                />
+                <LinearGradient
+                  colors={["transparent", "rgba(0,0,0,0.6)"]}
+                  style={styles.trailerGradient}
+                />
+                <View style={styles.trailerControls}>
+                  <Pressable style={styles.trailerPlayBtn} onPress={handleTrailerToggle}>
+                    <Ionicons
+                      name={trailerPlaying ? "pause" : "play"}
+                      size={24}
+                      color={COLORS.text}
+                    />
+                  </Pressable>
+                  <View style={styles.trailerInfo}>
+                    <Text style={styles.trailerLabel}>Official Trailer</Text>
+                    {trailerDuration > 0 && (
+                      <Text style={styles.trailerDuration}>
+                        {Math.floor(trailerDuration / 60)}:{(trailerDuration % 60).toString().padStart(2, "0")}
+                      </Text>
+                    )}
+                  </View>
+                  <Pressable style={styles.trailerMuteBtn} onPress={handleTrailerMute}>
+                    <Ionicons
+                      name={trailerMuted ? "volume-mute" : "volume-high"}
+                      size={18}
+                      color={COLORS.text}
+                    />
+                  </Pressable>
+                </View>
+              </View>
+            </Animated.View>
+          )}
+
           {stars.length > 0 && (
             <View style={styles.starsSection}>
               <Text style={styles.sectionTitle}>Cast</Text>
@@ -291,6 +356,8 @@ export default function DetailScreen() {
                       style={styles.starAvatar}
                       contentFit="cover"
                       transition={200}
+                      cachePolicy="memory-disk"
+                      recyclingKey={`cast-${star.staffId || idx}`}
                     />
                     <Text style={styles.starName} numberOfLines={1}>{star.name}</Text>
                     {star.character ? (
@@ -571,6 +638,72 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_400Regular",
     flex: 1,
+  },
+  trailerSection: {
+    marginBottom: 24,
+  },
+  trailerContainer: {
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: COLORS.backgroundCard,
+    position: "relative",
+  },
+  trailerVideo: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+  },
+  trailerPoster: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  trailerGradient: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 80,
+  },
+  trailerControls: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+    gap: 10,
+  },
+  trailerPlayBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(229,9,20,0.9)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  trailerInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  trailerLabel: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+  },
+  trailerDuration: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+  },
+  trailerMuteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   starsSection: {
     marginBottom: 24,
