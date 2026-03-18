@@ -1,4 +1,4 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -10,7 +10,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
   ViewToken,
 } from "react-native";
@@ -20,11 +19,10 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 import { COLORS } from "@/constants/colors";
-import { useApp } from "@/context/AppContext";
 import { ApiBannerItem, getGenres, getYear } from "@/data/api";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const HERO_HEIGHT = 520;
+const HERO_HEIGHT = 500;
 
 interface ApiBannerProps {
   items: ApiBannerItem[];
@@ -32,8 +30,6 @@ interface ApiBannerProps {
 }
 
 function HeroItem({ item, topInset }: { item: ApiBannerItem; topInset: number }) {
-  const { isInWatchlist, addToWatchlist, removeFromWatchlist } = useApp();
-  const inWatchlist = isInWatchlist(item.subjectId);
   const scale = useSharedValue(1);
   const subject = item.subject;
 
@@ -46,21 +42,15 @@ function HeroItem({ item, topInset }: { item: ApiBannerItem; topInset: number })
     router.push({ pathname: "/detail/[id]", params: { id: item.subjectId } });
   };
 
-  const handleWatchlist = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (inWatchlist) {
-      removeFromWatchlist(item.subjectId);
-    } else {
-      addToWatchlist(item.subjectId);
-    }
-  };
-
   const genres = subject ? getGenres(subject.genre) : [];
   const year = subject ? getYear(subject.releaseDate) : "";
   const rating = subject?.imdbRatingValue;
 
   return (
-    <View style={[styles.heroItem, { width: SCREEN_WIDTH }]}>
+    <Pressable
+      style={[styles.heroItem, { width: SCREEN_WIDTH }]}
+      onPress={handlePlay}
+    >
       <Image
         source={{ uri: item.image?.url }}
         style={styles.heroImage}
@@ -69,24 +59,37 @@ function HeroItem({ item, topInset }: { item: ApiBannerItem; topInset: number })
         placeholder={item.image?.blurHash ? { blurhash: item.image.blurHash } : undefined}
       />
       <LinearGradient
-        colors={["rgba(10,10,15,0.1)", "rgba(10,10,15,0.5)", COLORS.background]}
+        colors={["transparent", "rgba(10,10,15,0.4)", COLORS.background]}
         style={styles.heroGradient}
-        locations={[0, 0.5, 1]}
+        locations={[0, 0.45, 1]}
       />
       <LinearGradient
-        colors={["rgba(10,10,15,0.6)", "transparent"]}
+        colors={["rgba(10,10,15,0.5)", "transparent"]}
         style={styles.topGradient}
       />
 
       <View style={[styles.heroContent, { paddingTop: topInset + 60 }]}>
         <View style={styles.heroMeta}>
           {rating && parseFloat(rating) > 0 && (
-            <Text style={styles.matchText}>★ {parseFloat(rating).toFixed(1)} IMDb</Text>
+            <View style={styles.ratingPill}>
+              <Ionicons name="star" size={11} color={COLORS.accentGold} />
+              <Text style={styles.ratingPillText}>{parseFloat(rating).toFixed(1)}</Text>
+            </View>
           )}
-          {year ? <Text style={styles.metaText}>{year}</Text> : null}
-          {subject?.countryName ? <Text style={styles.metaText}>{subject.countryName}</Text> : null}
+          {year ? (
+            <View style={styles.metaPill}>
+              <Text style={styles.metaPillText}>{year}</Text>
+            </View>
+          ) : null}
+          {subject?.subjectType === 2 ? (
+            <View style={styles.metaPill}>
+              <Text style={styles.metaPillText}>Series</Text>
+            </View>
+          ) : null}
         </View>
+
         <Text style={styles.heroTitle} numberOfLines={2}>{item.title}</Text>
+
         <View style={styles.genreRow}>
           {genres.slice(0, 3).map((g, i) => (
             <React.Fragment key={g}>
@@ -96,40 +99,19 @@ function HeroItem({ item, topInset }: { item: ApiBannerItem; topInset: number })
           ))}
         </View>
 
-        <View style={styles.heroActions}>
-          <Animated.View style={playAnim}>
-            <Pressable
-              style={styles.playBtn}
-              onPressIn={() => { scale.value = withSpring(0.95); }}
-              onPressOut={() => { scale.value = withSpring(1); }}
-              onPress={handlePlay}
-            >
-              <Ionicons name="play" size={18} color="#000" />
-              <Text style={styles.playBtnText}>Play</Text>
-            </Pressable>
-          </Animated.View>
-
-          <TouchableOpacity style={styles.secondaryBtn} onPress={handleWatchlist}>
-            <Ionicons
-              name={inWatchlist ? "checkmark" : "add"}
-              size={20}
-              color={COLORS.text}
-            />
-            <Text style={styles.secondaryBtnText}>
-              {inWatchlist ? "Saved" : "My List"}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.infoBtn}
+        <Animated.View style={playAnim}>
+          <Pressable
+            style={styles.playBtn}
+            onPressIn={() => { scale.value = withSpring(0.95); }}
+            onPressOut={() => { scale.value = withSpring(1); }}
             onPress={handlePlay}
           >
-            <Feather name="info" size={18} color={COLORS.text} />
-            <Text style={styles.secondaryBtnText}>Info</Text>
-          </TouchableOpacity>
-        </View>
+            <Ionicons name="play" size={20} color="#000" />
+            <Text style={styles.playBtnText}>Play Now</Text>
+          </Pressable>
+        </Animated.View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -176,15 +158,6 @@ export function ApiBanner({ items, topInset }: ApiBannerProps) {
           index,
         })}
       />
-
-      <View style={styles.dots}>
-        {items.slice(0, 8).map((_, i) => (
-          <View
-            key={i}
-            style={[styles.dot2, i === activeIndex && styles.dotActive]}
-          />
-        ))}
-      </View>
     </View>
   );
 }
@@ -192,7 +165,7 @@ export function ApiBanner({ items, topInset }: ApiBannerProps) {
 const styles = StyleSheet.create({
   container: {
     height: HERO_HEIGHT,
-    marginBottom: 8,
+    marginBottom: 16,
   },
   heroItem: {
     height: HERO_HEIGHT,
@@ -207,7 +180,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: HERO_HEIGHT * 0.75,
+    height: HERO_HEIGHT * 0.8,
   },
   topGradient: {
     position: "absolute",
@@ -220,36 +193,53 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "flex-end",
     paddingHorizontal: 20,
-    paddingBottom: 36,
+    paddingBottom: 24,
   },
   heroMeta: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginBottom: 8,
+    gap: 8,
+    marginBottom: 10,
   },
-  matchText: {
+  ratingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(245,166,35,0.2)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(245,166,35,0.3)",
+  },
+  ratingPillText: {
     color: COLORS.accentGold,
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: "Inter_700Bold",
   },
-  metaText: {
+  metaPill: {
+    backgroundColor: "rgba(255,255,255,0.1)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  metaPillText: {
     color: COLORS.textSecondary,
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
   },
   heroTitle: {
     color: COLORS.text,
-    fontSize: 32,
+    fontSize: 30,
     fontFamily: "Inter_700Bold",
     letterSpacing: -1,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   genreRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginBottom: 20,
+    marginBottom: 18,
   },
   genreText: {
     color: COLORS.textSecondary,
@@ -260,64 +250,20 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontSize: 13,
   },
-  heroActions: {
-    flexDirection: "row",
-    gap: 10,
-  },
   playBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    backgroundColor: COLORS.text,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 6,
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 28,
+    paddingVertical: 13,
+    borderRadius: 10,
+    alignSelf: "flex-start",
   },
   playBtnText: {
-    color: "#000",
+    color: COLORS.text,
     fontSize: 15,
     fontFamily: "Inter_700Bold",
-  },
-  secondaryBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
-  },
-  infoBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 6,
-  },
-  secondaryBtnText: {
-    color: COLORS.text,
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-  },
-  dots: {
-    position: "absolute",
-    bottom: 40,
-    alignSelf: "center",
-    flexDirection: "row",
-    gap: 5,
-  },
-  dot2: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: "rgba(255,255,255,0.3)",
-  },
-  dotActive: {
-    backgroundColor: COLORS.primary,
-    width: 16,
   },
 });
