@@ -87,7 +87,7 @@ function SectionHeader({ title }: { title: string }) {
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
-  const { watchlist, clearRecentSearches } = useApp();
+  const { myList, clearRecentSearches } = useApp();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
 
   const [autoPlay, setAutoPlay] = useState(true);
@@ -135,7 +135,7 @@ export default function SettingsScreen() {
         {/* Stats Row */}
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{watchlist.length}</Text>
+            <Text style={styles.statValue}>{myList.length}</Text>
             <Text style={styles.statLabel}>My List</Text>
           </View>
           <View style={styles.statDivider} />

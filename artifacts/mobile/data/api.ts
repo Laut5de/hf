@@ -117,6 +117,39 @@ export async function fetchSearch(query: string): Promise<ApiSubject[]> {
   return Array.isArray(items) ? items : [];
 }
 
+export interface ApiSourceDownload {
+  id: string;
+  url: string;
+  resolution: number;
+  size: string;
+}
+
+export interface ApiCaption {
+  id: string;
+  lan: string;
+  lanName: string;
+  url: string;
+  size: string;
+  delay: number;
+}
+
+export interface ApiSourcesData {
+  downloads: ApiSourceDownload[];
+  captions: ApiCaption[];
+}
+
+export async function fetchSources(movieId: string): Promise<ApiSourcesData | null> {
+  try {
+    const res = await fetch(`${BASE_URL}/sources/${movieId}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (json.status !== "success") return null;
+    return json.data;
+  } catch {
+    return null;
+  }
+}
+
 export function formatDuration(seconds: number): string {
   if (!seconds || seconds <= 0) return "";
   const h = Math.floor(seconds / 3600);

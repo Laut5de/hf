@@ -6,67 +6,97 @@ import React, {
   useEffect,
   useState,
 } from "react";
-import { ALL_MEDIA, Media, MOCK_DOWNLOADS } from "@/data/mockData";
+import { ApiSubject } from "@/data/api";
+
+interface SavedItem {
+  subjectId: string;
+  subjectType: number;
+  title: string;
+  genre: string;
+  cover: { url: string; blurHash?: string };
+  releaseDate: string;
+  imdbRatingValue: string;
+  countryName: string;
+  detailPath: string;
+  duration: number;
+  savedAt: number;
+}
 
 interface AppContextType {
-  watchlist: string[];
-  downloads: Media[];
+  myList: SavedItem[];
   recentSearches: string[];
-  addToWatchlist: (id: string) => void;
-  removeFromWatchlist: (id: string) => void;
-  isInWatchlist: (id: string) => boolean;
+  addToMyList: (item: ApiSubject) => void;
+  removeFromMyList: (subjectId: string) => void;
+  isInMyList: (subjectId: string) => boolean;
+  isInWatchlist: (subjectId: string) => boolean;
+  addToWatchlist: (subjectId: string) => void;
+  removeFromWatchlist: (subjectId: string) => void;
   addRecentSearch: (query: string) => void;
   clearRecentSearches: () => void;
-  removeDownload: (id: string) => void;
-  getMediaById: (id: string) => Media | undefined;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
 
-const WATCHLIST_KEY = "jmhstream_watchlist";
+const MYLIST_KEY = "jmhstream_mylist";
 const SEARCHES_KEY = "jmhstream_recent_searches";
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [watchlist, setWatchlist] = useState<string[]>([]);
-  const [downloads, setDownloads] = useState<Media[]>(MOCK_DOWNLOADS);
+  const [myList, setMyList] = useState<SavedItem[]>([]);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [wl, searches] = await Promise.all([
-          AsyncStorage.getItem(WATCHLIST_KEY),
+        const [listData, searches] = await Promise.all([
+          AsyncStorage.getItem(MYLIST_KEY),
           AsyncStorage.getItem(SEARCHES_KEY),
         ]);
-        if (wl) setWatchlist(JSON.parse(wl));
+        if (listData) setMyList(JSON.parse(listData));
         if (searches) setRecentSearches(JSON.parse(searches));
       } catch {}
     };
     load();
   }, []);
 
-  const addToWatchlist = useCallback(async (id: string) => {
-    setWatchlist((prev) => {
-      const next = prev.includes(id) ? prev : [...prev, id];
-      AsyncStorage.setItem(WATCHLIST_KEY, JSON.stringify(next));
+  const addToMyList = useCallback((item: ApiSubject) => {
+    setMyList((prev) => {
+      if (prev.some((s) => s.subjectId === item.subjectId)) return prev;
+      const saved: SavedItem = {
+        subjectId: item.subjectId,
+        subjectType: item.subjectType,
+        title: item.title,
+        genre: item.genre,
+        cover: {
+          url: item.cover?.url || "",
+          blurHash: item.cover?.blurHash,
+        },
+        releaseDate: item.releaseDate,
+        imdbRatingValue: item.imdbRatingValue,
+        countryName: item.countryName,
+        detailPath: item.detailPath,
+        duration: item.duration,
+        savedAt: Date.now(),
+      };
+      const next = [saved, ...prev];
+      AsyncStorage.setItem(MYLIST_KEY, JSON.stringify(next));
       return next;
     });
   }, []);
 
-  const removeFromWatchlist = useCallback(async (id: string) => {
-    setWatchlist((prev) => {
-      const next = prev.filter((i) => i !== id);
-      AsyncStorage.setItem(WATCHLIST_KEY, JSON.stringify(next));
+  const removeFromMyList = useCallback((subjectId: string) => {
+    setMyList((prev) => {
+      const next = prev.filter((i) => i.subjectId !== subjectId);
+      AsyncStorage.setItem(MYLIST_KEY, JSON.stringify(next));
       return next;
     });
   }, []);
 
-  const isInWatchlist = useCallback(
-    (id: string) => watchlist.includes(id),
-    [watchlist]
+  const isInMyList = useCallback(
+    (subjectId: string) => myList.some((i) => i.subjectId === subjectId),
+    [myList]
   );
 
-  const addRecentSearch = useCallback(async (query: string) => {
+  const addRecentSearch = useCallback((query: string) => {
     if (!query.trim()) return;
     setRecentSearches((prev) => {
       const next = [query, ...prev.filter((q) => q !== query)].slice(0, 8);
@@ -75,33 +105,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const clearRecentSearches = useCallback(async () => {
+  const clearRecentSearches = useCallback(() => {
     setRecentSearches([]);
     AsyncStorage.removeItem(SEARCHES_KEY);
   }, []);
 
-  const removeDownload = useCallback((id: string) => {
-    setDownloads((prev) => prev.filter((d) => d.id !== id));
-  }, []);
-
-  const getMediaById = useCallback(
-    (id: string) => ALL_MEDIA.find((m) => m.id === id),
-    []
-  );
-
   return (
     <AppContext.Provider
       value={{
-        watchlist,
-        downloads,
+        myList,
         recentSearches,
-        addToWatchlist,
-        removeFromWatchlist,
-        isInWatchlist,
+        addToMyList,
+        removeFromMyList,
+        isInMyList,
+        isInWatchlist: isInMyList,
+        addToWatchlist: (id: string) => {
+          const placeholder: ApiSubject = {
+            subjectId: id,
+            subjectType: 1,
+            title: "",
+            description: "",
+            releaseDate: "",
+            duration: 0,
+            genre: "",
+            cover: { url: "", width: 0, height: 0 },
+            countryName: "",
+            imdbRatingValue: "",
+            hasResource: false,
+            detailPath: "",
+            imdbRatingCount: 0,
+            corner: "",
+            postTitle: "",
+          };
+          addToMyList(placeholder);
+        },
+        removeFromWatchlist: removeFromMyList,
         addRecentSearch,
         clearRecentSearches,
-        removeDownload,
-        getMediaById,
       }}
     >
       {children}

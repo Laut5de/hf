@@ -2,7 +2,7 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React from "react";
 import {
   Alert,
   FlatList,
@@ -13,188 +13,139 @@ import {
   View,
 } from "react-native";
 import Animated, {
+  FadeInDown,
   FadeOutLeft,
   Layout,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
+import { getGenres, getYear } from "@/data/api";
 
-export default function DownloadsScreen() {
+export default function MyListScreen() {
   const insets = useSafeAreaInsets();
-  const { downloads, removeDownload } = useApp();
-  const [editMode, setEditMode] = useState(false);
+  const { myList, removeFromMyList } = useApp();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
 
-  const handleDelete = (id: string, title: string) => {
+  const handleRemove = (subjectId: string, title: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    Alert.alert("Remove Download", `Remove "${title}" from downloads?`, [
+    Alert.alert("Remove from My List", `Remove "${title}"?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",
         style: "destructive",
-        onPress: () => removeDownload(id),
+        onPress: () => removeFromMyList(subjectId),
       },
     ]);
   };
 
-  const completed = downloads.filter((d) => d.downloadProgress === 1);
-  const inProgress = downloads.filter(
-    (d) => d.downloadProgress !== undefined && d.downloadProgress < 1
-  );
-
-  const totalSize = completed.length * 1.2; // mock GB
+  const validItems = myList.filter((item) => item.title && item.title.length > 0);
 
   return (
     <View style={[styles.container, { paddingTop: topInset }]}>
-      {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Downloads</Text>
-          <Text style={styles.headerSub}>
-            {completed.length} titles • {totalSize.toFixed(1)} GB used
-          </Text>
-        </View>
-        <Pressable
-          style={styles.editBtn}
-          onPress={() => setEditMode((e) => !e)}
-        >
-          <Text style={[styles.editText, editMode && { color: COLORS.primary }]}>
-            {editMode ? "Done" : "Edit"}
-          </Text>
-        </Pressable>
+        <Text style={styles.headerTitle}>My List</Text>
+        <Text style={styles.headerSub}>
+          {validItems.length} {validItems.length === 1 ? "title" : "titles"} saved
+        </Text>
       </View>
 
-      {/* Storage Bar */}
-      <View style={styles.storageContainer}>
-        <View style={styles.storageBar}>
-          <View style={[styles.storageFill, { width: `${(totalSize / 16) * 100}%` }]} />
-        </View>
-        <View style={styles.storageLegend}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: COLORS.primary }]} />
-            <Text style={styles.legendText}>JMH STREAM {totalSize.toFixed(1)} GB</Text>
-          </View>
-          <Text style={styles.storageAvail}>16 GB total</Text>
-        </View>
-      </View>
-
-      {downloads.length === 0 ? (
+      {validItems.length === 0 ? (
         <View style={styles.empty}>
-          <Feather name="download-cloud" size={56} color={COLORS.textMuted} />
-          <Text style={styles.emptyTitle}>No Downloads</Text>
+          <View style={styles.emptyIconWrap}>
+            <Ionicons name="bookmark-outline" size={36} color={COLORS.textMuted} />
+          </View>
+          <Text style={styles.emptyTitle}>Your list is empty</Text>
           <Text style={styles.emptyText}>
-            Download titles to watch them offline
+            Add movies and series to your list to watch them later
           </Text>
           <Pressable
-            style={styles.findBtn}
+            style={styles.browseBtn}
             onPress={() => router.push("/(tabs)/search")}
           >
-            <Text style={styles.findBtnText}>Find Something to Watch</Text>
+            <Text style={styles.browseBtnText}>Browse Content</Text>
           </Pressable>
         </View>
       ) : (
         <FlatList
-          data={downloads}
-          keyExtractor={(item) => item.id}
+          data={validItems}
+          keyExtractor={(item) => item.subjectId}
           contentContainerStyle={{
+            paddingHorizontal: 16,
             paddingBottom: Platform.OS === "web" ? 34 + 84 : insets.bottom + 100,
           }}
           showsVerticalScrollIndicator={false}
-          ListHeaderComponent={
-            inProgress.length > 0 ? (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Downloading</Text>
-              </View>
-            ) : null
-          }
-          renderItem={({ item }) => {
-            const isInProgress =
-              item.downloadProgress !== undefined && item.downloadProgress < 1;
+          renderItem={({ item, index }) => {
+            const genres = getGenres(item.genre);
+            const year = getYear(item.releaseDate);
+            const isSeries = item.subjectType === 2;
+            const rating = item.imdbRatingValue ? parseFloat(item.imdbRatingValue) : 0;
 
             return (
               <Animated.View
+                entering={FadeInDown.delay(index * 60).springify()}
                 exiting={FadeOutLeft}
                 layout={Layout.springify()}
-                style={styles.downloadItem}
               >
                 <Pressable
-                  style={styles.downloadPressable}
-                  onPress={() => {
-                    if (!editMode && !isInProgress) {
-                      router.push({
-                        pathname: "/detail/[id]",
-                        params: { id: item.id },
-                      });
-                    }
-                  }}
+                  style={styles.listItem}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/detail/[id]",
+                      params: { id: item.subjectId },
+                    })
+                  }
                 >
-                  <Image
-                    source={{ uri: item.thumbnail }}
-                    style={styles.thumbnail}
-                    contentFit="cover"
-                    transition={300}
-                  />
-                  <View style={styles.itemInfo}>
-                    <Text style={styles.itemTitle} numberOfLines={1}>
-                      {item.title}
-                    </Text>
-                    <Text style={styles.itemMeta}>
-                      {item.year} • {item.rating}
-                      {item.type === "series"
-                        ? ` • ${item.seasons?.length} Seasons`
-                        : ` • ${item.duration}`}
-                    </Text>
-                    {isInProgress ? (
-                      <View style={styles.progressContainer}>
-                        <View style={styles.downloadProgressBar}>
-                          <View
-                            style={[
-                              styles.downloadProgressFill,
-                              {
-                                width: `${(item.downloadProgress ?? 0) * 100}%`,
-                              },
-                            ]}
-                          />
-                        </View>
-                        <Text style={styles.progressText}>
-                          {Math.round((item.downloadProgress ?? 0) * 100)}%
-                        </Text>
-                      </View>
-                    ) : (
-                      <View style={styles.readyRow}>
-                        <Feather
-                          name="check-circle"
-                          size={12}
-                          color={COLORS.success}
-                        />
-                        <Text style={styles.readyText}>Ready to watch</Text>
+                  <View style={styles.posterWrap}>
+                    <Image
+                      source={{ uri: item.cover.url }}
+                      style={styles.poster}
+                      contentFit="cover"
+                      transition={200}
+                      placeholder={item.cover.blurHash ? { blurhash: item.cover.blurHash } : undefined}
+                    />
+                    {isSeries && (
+                      <View style={styles.typeBadge}>
+                        <Text style={styles.typeBadgeText}>Series</Text>
                       </View>
                     )}
                   </View>
-
-                  {editMode ? (
-                    <Pressable
-                      style={styles.deleteBtn}
-                      onPress={() => handleDelete(item.id, item.title)}
-                    >
-                      <Feather name="trash-2" size={18} color={COLORS.error} />
-                    </Pressable>
-                  ) : isInProgress ? (
-                    <Pressable style={styles.pauseBtn}>
-                      <Ionicons
-                        name="pause-circle"
-                        size={28}
-                        color={COLORS.primary}
-                      />
-                    </Pressable>
-                  ) : (
-                    <Feather
-                      name="chevron-right"
-                      size={18}
-                      color={COLORS.textMuted}
-                    />
-                  )}
+                  <View style={styles.info}>
+                    <Text style={styles.title} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    <View style={styles.metaRow}>
+                      {year ? <Text style={styles.metaText}>{year}</Text> : null}
+                      {item.countryName ? (
+                        <>
+                          <View style={styles.dot} />
+                          <Text style={styles.metaText}>{item.countryName}</Text>
+                        </>
+                      ) : null}
+                    </View>
+                    {genres.length > 0 && (
+                      <View style={styles.genreRow}>
+                        {genres.slice(0, 2).map((g) => (
+                          <View key={g} style={styles.genreChip}>
+                            <Text style={styles.genreChipText}>{g}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                    {rating > 0 && (
+                      <View style={styles.ratingRow}>
+                        <Ionicons name="star" size={11} color={COLORS.accentGold} />
+                        <Text style={styles.ratingText}>{rating.toFixed(1)}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Pressable
+                    style={styles.removeBtn}
+                    onPress={() => handleRemove(item.subjectId, item.title)}
+                    hitSlop={10}
+                  >
+                    <Feather name="x" size={18} color={COLORS.textMuted} />
+                  </Pressable>
                 </Pressable>
               </Animated.View>
             );
@@ -211,9 +162,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
     paddingHorizontal: 20,
     paddingBottom: 16,
   },
@@ -227,65 +175,7 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontSize: 13,
     fontFamily: "Inter_400Regular",
-    marginTop: 2,
-  },
-  editBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-  },
-  editText: {
-    color: COLORS.textSecondary,
-    fontSize: 15,
-    fontFamily: "Inter_500Medium",
-  },
-  storageContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 24,
-  },
-  storageBar: {
-    height: 6,
-    backgroundColor: COLORS.backgroundCard,
-    borderRadius: 3,
-    overflow: "hidden",
-    marginBottom: 8,
-  },
-  storageFill: {
-    height: "100%",
-    backgroundColor: COLORS.primary,
-    borderRadius: 3,
-  },
-  storageLegend: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  legendText: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-  },
-  storageAvail: {
-    color: COLORS.textMuted,
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-  },
-  section: {
-    paddingHorizontal: 20,
-    paddingBottom: 8,
-  },
-  sectionTitle: {
-    color: COLORS.text,
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
+    marginTop: 4,
   },
   empty: {
     flex: 1,
@@ -293,6 +183,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 12,
     paddingBottom: 80,
+  },
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: COLORS.backgroundCard,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
   },
   emptyTitle: {
     color: COLORS.text,
@@ -306,92 +205,111 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: 40,
   },
-  findBtn: {
+  browseBtn: {
     marginTop: 8,
     backgroundColor: COLORS.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
     borderRadius: 8,
   },
-  findBtnText: {
+  browseBtnText: {
     color: COLORS.text,
     fontSize: 14,
     fontFamily: "Inter_600SemiBold",
   },
-  downloadItem: {
-    marginHorizontal: 16,
-    marginBottom: 4,
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  downloadPressable: {
+  listItem: {
     flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-    gap: 12,
+    alignItems: "flex-start",
+    gap: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  posterWrap: {
+    position: "relative",
+  },
+  poster: {
+    width: 85,
+    height: 125,
+    borderRadius: 8,
     backgroundColor: COLORS.backgroundCard,
   },
-  thumbnail: {
-    width: 85,
-    height: 60,
-    borderRadius: 6,
+  typeBadge: {
+    position: "absolute",
+    top: 5,
+    left: 5,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 3,
   },
-  itemInfo: {
-    flex: 1,
-    gap: 4,
-  },
-  itemTitle: {
+  typeBadgeText: {
     color: COLORS.text,
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
+    fontSize: 9,
+    fontFamily: "Inter_700Bold",
+    textTransform: "uppercase",
   },
-  itemMeta: {
+  info: {
+    flex: 1,
+    gap: 5,
+    paddingTop: 4,
+  },
+  title: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
+    lineHeight: 22,
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  metaText: {
     color: COLORS.textMuted,
     fontSize: 12,
     fontFamily: "Inter_400Regular",
   },
-  progressContainer: {
+  dot: {
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: COLORS.textMuted,
+  },
+  genreRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
-  downloadProgressBar: {
-    flex: 1,
-    height: 4,
-    backgroundColor: COLORS.background,
-    borderRadius: 2,
-    overflow: "hidden",
+  genreChip: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  downloadProgressFill: {
-    height: "100%",
-    backgroundColor: COLORS.primary,
-    borderRadius: 2,
-  },
-  progressText: {
-    color: COLORS.textMuted,
+  genreChipText: {
+    color: COLORS.textSecondary,
     fontSize: 11,
     fontFamily: "Inter_500Medium",
   },
-  readyRow: {
+  ratingRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
   },
-  readyText: {
-    color: COLORS.success,
+  ratingText: {
+    color: COLORS.accentGold,
     fontSize: 12,
-    fontFamily: "Inter_500Medium",
+    fontFamily: "Inter_700Bold",
   },
-  deleteBtn: {
-    width: 36,
-    height: 36,
+  removeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.06)",
     alignItems: "center",
     justifyContent: "center",
-  },
-  pauseBtn: {
-    width: 36,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
+    marginTop: 4,
   },
 });

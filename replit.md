@@ -107,6 +107,14 @@ Expo/React Native mobile streaming app called "JMH STREAM". Dark cinematic theme
 - **API Layer**: `data/api.ts` — fetch functions + TypeScript types for the API
 - **Components**: `ApiBanner.tsx` (hero carousel), `ApiMediaCard.tsx` (poster card), `ApiMediaRow.tsx` (horizontal row)
 - **Navigation**: Uses `subjectId` (numeric) for routing to detail screen
-- **State**: React Query for API data caching; AsyncStorage for watchlist/recent searches
+- **Video Player**: `app/player.tsx` — Netflix-style fullscreen player with expo-av
+  - Quality selector (360p/480p/1080p from API), caption/subtitle toggle, volume controls
+  - Custom overlay controls: play/pause, seek bar, skip ±10s, auto-hide after 4s
+  - Sources fetched from `GET /api/sources/:movieId`
+- **My List**: Saves full `ApiSubject` data to AsyncStorage (key: `jmhstream_mylist`)
+  - Tab renamed from "Downloads" to "My List" with bookmark icon
+  - Detail screen "My List" button saves complete media info (poster, title, genre, rating, etc.)
+  - My List screen shows saved items with posters, genres, ratings, remove option
+- **State**: React Query for API data caching (12-hour staleTime + gcTime, persisted to AsyncStorage); AsyncStorage for My List/recent searches
 - **Design**: Background `#0A0A0F`, primary `#E50914`, Inter font family, reanimated animations
 - **Bundle ID**: `com.jmhstream.app`

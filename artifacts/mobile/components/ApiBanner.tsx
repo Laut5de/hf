@@ -39,6 +39,13 @@ function HeroItem({ item, topInset }: { item: ApiBannerItem; topInset: number })
 
   const handlePlay = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.push({
+      pathname: "/player",
+      params: { id: item.subjectId, title: item.title },
+    });
+  };
+
+  const handleDetail = () => {
     router.push({ pathname: "/detail/[id]", params: { id: item.subjectId } });
   };
 
@@ -49,7 +56,7 @@ function HeroItem({ item, topInset }: { item: ApiBannerItem; topInset: number })
   return (
     <Pressable
       style={[styles.heroItem, { width: SCREEN_WIDTH }]}
-      onPress={handlePlay}
+      onPress={handleDetail}
     >
       <Image
         source={{ uri: item.image?.url }}

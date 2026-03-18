@@ -35,7 +35,7 @@ export default function HomeScreen() {
   const { data, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ["homepage"],
     queryFn: fetchHomepage,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 12 * 60 * 60 * 1000,
   });
 
   const scrollHandler = useAnimatedScrollHandler({

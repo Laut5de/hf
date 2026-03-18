@@ -23,7 +23,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
-import { fetchInfo, formatDuration, getGenres, getYear } from "@/data/api";
+import { ApiSubject, fetchInfo, formatDuration, getGenres, getYear } from "@/data/api";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const BACKDROP_HEIGHT = 320;
@@ -31,31 +31,18 @@ const BACKDROP_HEIGHT = 320;
 export default function DetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const { isInWatchlist, addToWatchlist, removeFromWatchlist } = useApp();
+  const { isInMyList, addToMyList, removeFromMyList } = useApp();
   const [showFullDesc, setShowFullDesc] = useState(false);
   const [selectedSeasonIdx, setSelectedSeasonIdx] = useState(0);
 
   const topInset = Platform.OS === "web" ? 67 : insets.top;
-  const inWatchlist = isInWatchlist(id as string);
+  const inMyList = isInMyList(id as string);
 
   const { data: apiData, isLoading } = useQuery({
     queryKey: ["info", id],
     queryFn: () => fetchInfo(id as string),
     enabled: !!id,
   });
-
-  const handleWatchlist = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (inWatchlist) {
-      removeFromWatchlist(id as string);
-    } else {
-      addToWatchlist(id as string);
-    }
-  };
-
-  const handlePlay = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  };
 
   if (isLoading) {
     return (
@@ -93,6 +80,40 @@ export default function DetailScreen() {
   const country = subject.countryName || "";
   const isSeries = subject.subjectType === 2;
   const duration = formatDuration(subject.duration || 0);
+
+  const handleMyList = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (inMyList) {
+      removeFromMyList(id as string);
+    } else {
+      const apiSubject: ApiSubject = {
+        subjectId: subject.subjectId || id as string,
+        subjectType: subject.subjectType || 1,
+        title: subject.title || "",
+        description: subject.description || "",
+        releaseDate: subject.releaseDate || "",
+        duration: subject.duration || 0,
+        genre: subject.genre || "",
+        cover: subject.cover || { url: "", width: 0, height: 0 },
+        countryName: subject.countryName || "",
+        imdbRatingValue: subject.imdbRatingValue || "",
+        hasResource: subject.hasResource || false,
+        detailPath: subject.detailPath || "",
+        imdbRatingCount: subject.imdbRatingCount || 0,
+        corner: subject.corner || "",
+        postTitle: subject.postTitle || "",
+      };
+      addToMyList(apiSubject);
+    }
+  };
+
+  const handlePlay = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.push({
+      pathname: "/player",
+      params: { id: id as string, title: title },
+    });
+  };
 
   const description =
     showFullDesc || descriptionText.length < 120
@@ -196,14 +217,14 @@ export default function DetailScreen() {
           </Animated.View>
 
           <View style={styles.iconActions}>
-            <TouchableOpacity style={styles.iconAction} onPress={handleWatchlist}>
+            <TouchableOpacity style={styles.iconAction} onPress={handleMyList}>
               <Ionicons
-                name={inWatchlist ? "checkmark-circle" : "add-circle-outline"}
+                name={inMyList ? "checkmark-circle" : "add-circle-outline"}
                 size={24}
-                color={inWatchlist ? COLORS.success : COLORS.text}
+                color={inMyList ? COLORS.success : COLORS.text}
               />
               <Text style={styles.iconActionText}>
-                {inWatchlist ? "Saved" : "My List"}
+                {inMyList ? "Saved" : "My List"}
               </Text>
             </TouchableOpacity>
 
