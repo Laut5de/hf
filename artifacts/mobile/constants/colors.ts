@@ -12,6 +12,7 @@ export const COLORS = {
 
   accent: "#FF6B35",
   accentGold: "#F5A623",
+  gold: "#F5A623",
 
   text: "#FFFFFF",
   textSecondary: "rgba(255, 255, 255, 0.65)",

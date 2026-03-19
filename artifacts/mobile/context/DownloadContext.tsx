@@ -15,6 +15,8 @@ import type { DownloadQuality } from "@/context/AppContext";
 
 let FS: any = null;
 let SharingModule: any = null;
+let MediaLibrary: any = null;
+let TaskManager: any = null;
 
 try {
   FS = require("expo-file-system/legacy");
@@ -26,6 +28,14 @@ try {
 
 try {
   SharingModule = require("expo-sharing");
+} catch {}
+
+try {
+  MediaLibrary = require("expo-media-library");
+} catch {}
+
+try {
+  TaskManager = require("expo-task-manager");
 } catch {}
 
 export interface DownloadedItem {
@@ -50,6 +60,20 @@ export interface ActiveDownload {
   status: "downloading" | "paused" | "error";
 }
 
+interface PausedDownloadData {
+  subjectId: string;
+  title: string;
+  coverUrl: string;
+  coverBlurHash?: string;
+  genre: string;
+  duration: number;
+  quality: number;
+  fileSize: number;
+  filePath: string;
+  proxyUrl: string;
+  savableState: any;
+}
+
 interface DownloadContextType {
   downloads: DownloadedItem[];
   activeDownloads: ActiveDownload[];
@@ -61,10 +85,13 @@ interface DownloadContextType {
     genre: string;
     duration: number;
   }) => Promise<void>;
+  pauseDownload: (subjectId: string) => Promise<void>;
+  resumeDownload: (subjectId: string) => Promise<void>;
   cancelDownload: (subjectId: string) => void;
   removeDownload: (subjectId: string) => Promise<void>;
   isDownloaded: (subjectId: string) => boolean;
   isDownloading: (subjectId: string) => boolean;
+  isPaused: (subjectId: string) => boolean;
   getDownloadProgress: (subjectId: string) => number;
   getDownloadPath: (subjectId: string) => string | null;
   shareDownload: (subjectId: string) => Promise<void>;
@@ -74,6 +101,7 @@ interface DownloadContextType {
 const DownloadContext = createContext<DownloadContextType | null>(null);
 
 const DOWNLOADS_KEY = "jmhstream_downloads";
+const PAUSED_KEY = "jmhstream_paused_downloads";
 
 function getDownloadDir() {
   if (!FS?.documentDirectory) return "";
@@ -91,12 +119,26 @@ function qualityToResolution(q: DownloadQuality): number {
 
 const isNative = Platform.OS !== "web";
 
+async function requestStoragePermission(): Promise<boolean> {
+  if (Platform.OS !== "android") return true;
+  if (!MediaLibrary) return true;
+  try {
+    const { status } = await MediaLibrary.requestPermissionsAsync();
+    return status === "granted";
+  } catch {
+    return true;
+  }
+}
+
 export function DownloadProvider({ children }: { children: React.ReactNode }) {
   const { settings } = useApp();
   const [downloads, setDownloads] = useState<DownloadedItem[]>([]);
   const [activeDownloads, setActiveDownloads] = useState<ActiveDownload[]>([]);
   const resumablesRef = useRef<Record<string, any>>({});
   const cancelledRef = useRef<Set<string>>(new Set());
+  const pausedRef = useRef<Set<string>>(new Set());
+  const pausedDataRef = useRef<Record<string, PausedDownloadData>>({});
+  const startDownloadRef = useRef<((params: any) => Promise<void>) | null>(null);
 
   useEffect(() => {
     if (!isNative || !FS) return;
@@ -124,6 +166,35 @@ export function DownloadProvider({ children }: { children: React.ReactNode }) {
       } catch {}
 
       try {
+        const pausedRaw = await AsyncStorage.getItem(PAUSED_KEY);
+        if (pausedRaw) {
+          const pausedItems: PausedDownloadData[] = JSON.parse(pausedRaw);
+          const pausedMap: Record<string, PausedDownloadData> = {};
+          const pausedActive: ActiveDownload[] = [];
+          for (const p of pausedItems) {
+            pausedMap[p.subjectId] = p;
+            let downloadedBytes = 0;
+            try {
+              const info = await FS.getInfoAsync(p.filePath);
+              if (info.exists && info.size) downloadedBytes = info.size;
+            } catch {}
+            pausedActive.push({
+              subjectId: p.subjectId,
+              title: p.title,
+              progress: p.fileSize > 0 ? downloadedBytes / p.fileSize : 0,
+              totalBytes: p.fileSize,
+              downloadedBytes,
+              status: "paused",
+            });
+          }
+          pausedDataRef.current = pausedMap;
+          if (pausedActive.length > 0) {
+            setActiveDownloads((prev) => [...prev, ...pausedActive]);
+          }
+        }
+      } catch {}
+
+      try {
         const dir = getDownloadDir();
         if (dir) {
           const dirInfo = await FS.getInfoAsync(dir);
@@ -139,13 +210,27 @@ export function DownloadProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem(DOWNLOADS_KEY, JSON.stringify(items));
   }, []);
 
+  const persistPaused = useCallback(async () => {
+    const items = Object.values(pausedDataRef.current);
+    if (items.length > 0) {
+      await AsyncStorage.setItem(PAUSED_KEY, JSON.stringify(items));
+    } else {
+      await AsyncStorage.removeItem(PAUSED_KEY);
+    }
+  }, []);
+
   const isDownloaded = useCallback(
     (subjectId: string) => downloads.some((d) => d.subjectId === subjectId),
     [downloads]
   );
 
   const isDownloading = useCallback(
-    (subjectId: string) => activeDownloads.some((d) => d.subjectId === subjectId),
+    (subjectId: string) => activeDownloads.some((d) => d.subjectId === subjectId && d.status === "downloading"),
+    [activeDownloads]
+  );
+
+  const isPaused = useCallback(
+    (subjectId: string) => activeDownloads.some((d) => d.subjectId === subjectId && d.status === "paused"),
     [activeDownloads]
   );
 
@@ -165,6 +250,129 @@ export function DownloadProvider({ children }: { children: React.ReactNode }) {
     [downloads]
   );
 
+  const finishDownload = useCallback(async (
+    params: { subjectId: string; title: string; coverUrl: string; coverBlurHash?: string; genre: string; duration: number },
+    quality: number,
+    filePath: string
+  ) => {
+    let actualSize = 0;
+    try {
+      const fileInfo = await FS.getInfoAsync(filePath);
+      if (fileInfo.exists && fileInfo.size) {
+        actualSize = fileInfo.size;
+      }
+    } catch {}
+
+    const newItem: DownloadedItem = {
+      subjectId: params.subjectId,
+      title: params.title,
+      coverUrl: params.coverUrl,
+      coverBlurHash: params.coverBlurHash,
+      genre: params.genre,
+      duration: params.duration,
+      quality,
+      fileSize: actualSize,
+      filePath,
+      downloadedAt: Date.now(),
+    };
+
+    setDownloads((prev) => {
+      const next = [newItem, ...prev];
+      persistDownloads(next);
+      return next;
+    });
+  }, [persistDownloads]);
+
+  const runDownload = useCallback(async (
+    subjectId: string,
+    proxyUrl: string,
+    filePath: string,
+    params: { subjectId: string; title: string; coverUrl: string; coverBlurHash?: string; genre: string; duration: number },
+    quality: number,
+    fileSize: number,
+    resumeData?: any
+  ) => {
+    const progressCallback = (data: { totalBytesWritten: number; totalBytesExpectedToWrite: number }) => {
+      const progress = data.totalBytesExpectedToWrite > 0
+        ? data.totalBytesWritten / data.totalBytesExpectedToWrite
+        : 0;
+      setActiveDownloads((prev) =>
+        prev.map((d) =>
+          d.subjectId === subjectId
+            ? { ...d, progress, downloadedBytes: data.totalBytesWritten, totalBytes: data.totalBytesExpectedToWrite, status: "downloading" as const }
+            : d
+        )
+      );
+    };
+
+    let downloadResumable: any;
+    if (resumeData) {
+      downloadResumable = new FS.DownloadResumable(
+        proxyUrl,
+        filePath,
+        {},
+        progressCallback,
+        resumeData
+      );
+    } else {
+      downloadResumable = FS.createDownloadResumable(
+        proxyUrl,
+        filePath,
+        {},
+        progressCallback
+      );
+    }
+    resumablesRef.current[subjectId] = downloadResumable;
+
+    try {
+      const result = resumeData
+        ? await downloadResumable.resumeAsync()
+        : await downloadResumable.downloadAsync();
+
+      if (cancelledRef.current.has(subjectId)) {
+        try { await FS.deleteAsync(filePath, { idempotent: true }); } catch {}
+        cancelledRef.current.delete(subjectId);
+        delete pausedDataRef.current[subjectId];
+        persistPaused();
+        setActiveDownloads((prev) => prev.filter((d) => d.subjectId !== subjectId));
+        delete resumablesRef.current[subjectId];
+        return;
+      }
+      if (pausedRef.current.has(subjectId)) {
+        pausedRef.current.delete(subjectId);
+        delete resumablesRef.current[subjectId];
+        return;
+      }
+      if (result) {
+        await finishDownload(params, quality, filePath);
+        delete pausedDataRef.current[subjectId];
+        persistPaused();
+        setActiveDownloads((prev) => prev.filter((d) => d.subjectId !== subjectId));
+        delete resumablesRef.current[subjectId];
+      }
+    } catch (err: any) {
+      if (cancelledRef.current.has(subjectId)) {
+        try { await FS.deleteAsync(filePath, { idempotent: true }); } catch {}
+        cancelledRef.current.delete(subjectId);
+        delete pausedDataRef.current[subjectId];
+        persistPaused();
+        setActiveDownloads((prev) => prev.filter((d) => d.subjectId !== subjectId));
+        delete resumablesRef.current[subjectId];
+      } else if (pausedRef.current.has(subjectId)) {
+        pausedRef.current.delete(subjectId);
+        delete resumablesRef.current[subjectId];
+      } else {
+        setActiveDownloads((prev) =>
+          prev.map((d) =>
+            d.subjectId === subjectId ? { ...d, status: "error" as const } : d
+          )
+        );
+        delete resumablesRef.current[subjectId];
+        Alert.alert("Download Failed", "Could not download this content. Please try again.");
+      }
+    }
+  }, [finishDownload, persistPaused]);
+
   const startDownload = useCallback(async (params: {
     subjectId: string;
     title: string;
@@ -178,6 +386,12 @@ export function DownloadProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     if (isDownloaded(params.subjectId) || isDownloading(params.subjectId)) return;
+
+    const hasPermission = await requestStoragePermission();
+    if (!hasPermission) {
+      Alert.alert("Permission Required", "Storage permission is needed to download content. Please grant it in Settings.");
+      return;
+    }
 
     if (settings.downloadOnWifiOnly) {
       try {
@@ -214,9 +428,11 @@ export function DownloadProvider({ children }: { children: React.ReactNode }) {
       (a, b) => Math.abs(a.resolution - targetRes) - Math.abs(b.resolution - targetRes)
     );
     const source = sorted[0];
+    const proxyUrl = source.proxyUrl || source.url;
 
     const fileName = `${params.subjectId}_${source.resolution}p.mp4`;
     const filePath = getDownloadDir() + fileName;
+    const fileSize = parseInt(source.size, 10) || 0;
 
     setActiveDownloads((prev) => [
       ...prev,
@@ -224,87 +440,121 @@ export function DownloadProvider({ children }: { children: React.ReactNode }) {
         subjectId: params.subjectId,
         title: params.title,
         progress: 0,
-        totalBytes: parseInt(source.size, 10) || 0,
+        totalBytes: fileSize,
         downloadedBytes: 0,
         status: "downloading",
       },
     ]);
 
-    const progressCallback = (data: { totalBytesWritten: number; totalBytesExpectedToWrite: number }) => {
-      const progress = data.totalBytesExpectedToWrite > 0
-        ? data.totalBytesWritten / data.totalBytesExpectedToWrite
-        : 0;
-      setActiveDownloads((prev) =>
-        prev.map((d) =>
-          d.subjectId === params.subjectId
-            ? {
-                ...d,
-                progress,
-                downloadedBytes: data.totalBytesWritten,
-                totalBytes: data.totalBytesExpectedToWrite,
-              }
-            : d
-        )
-      );
+    pausedDataRef.current[params.subjectId] = {
+      subjectId: params.subjectId,
+      title: params.title,
+      coverUrl: params.coverUrl,
+      coverBlurHash: params.coverBlurHash,
+      genre: params.genre,
+      duration: params.duration,
+      quality: source.resolution,
+      fileSize,
+      filePath,
+      proxyUrl,
+      savableState: null,
     };
 
-    const downloadResumable = FS.createDownloadResumable(
-      source.url,
-      filePath,
-      {},
-      progressCallback
-    );
-    resumablesRef.current[params.subjectId] = downloadResumable;
+    await runDownload(params.subjectId, proxyUrl, filePath, params, source.resolution, fileSize);
+  }, [isDownloaded, isDownloading, settings.downloadQuality, settings.downloadOnWifiOnly, runDownload]);
+
+  const pauseDownload = useCallback(async (subjectId: string) => {
+    const resumable = resumablesRef.current[subjectId];
+    if (!resumable) return;
+
+    pausedRef.current.add(subjectId);
 
     try {
-      const result = await downloadResumable.downloadAsync();
-      if (cancelledRef.current.has(params.subjectId)) {
-        try { await FS.deleteAsync(filePath, { idempotent: true }); } catch {}
-        return;
+      const saveData = await resumable.pauseAsync();
+      if (pausedDataRef.current[subjectId]) {
+        pausedDataRef.current[subjectId].savableState = saveData;
+        await persistPaused();
       }
-      if (result) {
-        let actualSize = parseInt(source.size, 10) || 0;
-        try {
-          const fileInfo = await FS.getInfoAsync(filePath);
-          if (fileInfo.exists && fileInfo.size) {
-            actualSize = fileInfo.size;
-          }
-        } catch {}
-
-        const newItem: DownloadedItem = {
-          subjectId: params.subjectId,
-          title: params.title,
-          coverUrl: params.coverUrl,
-          coverBlurHash: params.coverBlurHash,
-          genre: params.genre,
-          duration: params.duration,
-          quality: source.resolution,
-          fileSize: actualSize,
-          filePath,
-          downloadedAt: Date.now(),
-        };
-
-        setDownloads((prev) => {
-          const next = [newItem, ...prev];
-          persistDownloads(next);
-          return next;
-        });
-      }
-    } catch (err: any) {
-      if (cancelledRef.current.has(params.subjectId)) {
-        try { await FS.deleteAsync(filePath, { idempotent: true }); } catch {}
-      } else {
-        try { await FS.deleteAsync(filePath, { idempotent: true }); } catch {}
-        Alert.alert("Download Failed", "Could not download this content. Please try again.");
-      }
-    } finally {
-      cancelledRef.current.delete(params.subjectId);
-      setActiveDownloads((prev) =>
-        prev.filter((d) => d.subjectId !== params.subjectId)
-      );
-      delete resumablesRef.current[params.subjectId];
+    } catch {
+      pausedRef.current.delete(subjectId);
     }
-  }, [isDownloaded, isDownloading, settings.downloadQuality, settings.downloadOnWifiOnly, persistDownloads]);
+
+    setActiveDownloads((prev) =>
+      prev.map((d) =>
+        d.subjectId === subjectId ? { ...d, status: "paused" as const } : d
+      )
+    );
+  }, [persistPaused]);
+
+  const resumeDownload = useCallback(async (subjectId: string) => {
+    const paused = pausedDataRef.current[subjectId];
+    if (!paused) return;
+
+    if (settings.downloadOnWifiOnly) {
+      try {
+        const netState = await NetInfo.fetch();
+        if (netState.type !== "wifi") {
+          Alert.alert("Wi-Fi Required", "Connect to Wi-Fi to resume download.");
+          return;
+        }
+      } catch {}
+    }
+
+    if (!paused.savableState) {
+      delete pausedDataRef.current[subjectId];
+      persistPaused();
+      setActiveDownloads((prev) => prev.filter((d) => d.subjectId !== subjectId));
+      Alert.alert(
+        "Cannot Resume",
+        "This download cannot be resumed. Would you like to restart it?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Restart",
+            onPress: () => {
+              try { FS.deleteAsync(paused.filePath, { idempotent: true }); } catch {}
+              startDownloadRef.current?.({
+                subjectId: paused.subjectId,
+                title: paused.title,
+                coverUrl: paused.coverUrl,
+                coverBlurHash: paused.coverBlurHash,
+                genre: paused.genre,
+                duration: paused.duration,
+              });
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    setActiveDownloads((prev) =>
+      prev.map((d) =>
+        d.subjectId === subjectId ? { ...d, status: "downloading" as const } : d
+      )
+    );
+
+    const params = {
+      subjectId: paused.subjectId,
+      title: paused.title,
+      coverUrl: paused.coverUrl,
+      coverBlurHash: paused.coverBlurHash,
+      genre: paused.genre,
+      duration: paused.duration,
+    };
+
+    await runDownload(
+      subjectId,
+      paused.proxyUrl,
+      paused.filePath,
+      params,
+      paused.quality,
+      paused.fileSize,
+      paused.savableState
+    );
+  }, [settings.downloadOnWifiOnly, runDownload, persistPaused]);
+
+  startDownloadRef.current = startDownload;
 
   const cancelDownload = useCallback((subjectId: string) => {
     cancelledRef.current.add(subjectId);
@@ -313,8 +563,21 @@ export function DownloadProvider({ children }: { children: React.ReactNode }) {
       try { resumable.pauseAsync(); } catch {}
       delete resumablesRef.current[subjectId];
     }
+    delete pausedDataRef.current[subjectId];
+    persistPaused();
     setActiveDownloads((prev) => prev.filter((d) => d.subjectId !== subjectId));
-  }, []);
+    const filePath = getDownloadDir() + `${subjectId}_`;
+    if (FS) {
+      FS.getInfoAsync(getDownloadDir()).then((dirInfo: any) => {
+        if (!dirInfo.exists) return;
+        FS.readDirectoryAsync(getDownloadDir()).then((files: string[]) => {
+          files.filter((f: string) => f.startsWith(subjectId)).forEach((f: string) => {
+            FS.deleteAsync(getDownloadDir() + f, { idempotent: true }).catch(() => {});
+          });
+        }).catch(() => {});
+      }).catch(() => {});
+    }
+  }, [persistPaused]);
 
   const removeDownload = useCallback(async (subjectId: string) => {
     const item = downloads.find((d) => d.subjectId === subjectId);
@@ -354,10 +617,13 @@ export function DownloadProvider({ children }: { children: React.ReactNode }) {
         downloads,
         activeDownloads,
         startDownload,
+        pauseDownload,
+        resumeDownload,
         cancelDownload,
         removeDownload,
         isDownloaded,
         isDownloading,
+        isPaused,
         getDownloadProgress,
         getDownloadPath,
         shareDownload,

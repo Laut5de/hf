@@ -51,6 +51,8 @@ export default function MyListScreen() {
     activeDownloads,
     removeDownload,
     cancelDownload,
+    pauseDownload,
+    resumeDownload,
     shareDownload,
     totalStorageUsed,
   } = useDownloads();
@@ -173,35 +175,69 @@ export default function MyListScreen() {
     );
   };
 
-  const renderActiveDownload = (item: ActiveDownload, index: number) => (
-    <Animated.View
-      key={item.subjectId}
-      entering={FadeInDown.delay(index * 60).springify()}
-      style={styles.downloadItem}
-    >
-      <View style={styles.downloadItemLeft}>
-        <ActivityIndicator size="small" color={COLORS.primary} />
-        <View style={styles.downloadItemInfo}>
-          <Text style={styles.downloadTitle} numberOfLines={1}>{item.title}</Text>
-          <View style={styles.progressBarBg}>
-            <View
-              style={[styles.progressBarFill, { width: `${Math.round(item.progress * 100)}%` }]}
-            />
-          </View>
-          <Text style={styles.downloadMeta}>
-            {Math.round(item.progress * 100)}% · {formatBytes(item.downloadedBytes)} / {formatBytes(item.totalBytes)}
-          </Text>
-        </View>
-      </View>
-      <Pressable
-        style={styles.cancelBtn}
-        onPress={() => cancelDownload(item.subjectId)}
-        hitSlop={10}
+  const renderActiveDownload = (item: ActiveDownload, index: number) => {
+    const isPausedItem = item.status === "paused";
+    const isError = item.status === "error";
+    return (
+      <Animated.View
+        key={item.subjectId}
+        entering={FadeInDown.delay(index * 60).springify()}
+        style={styles.downloadItem}
       >
-        <Feather name="x" size={16} color={COLORS.textMuted} />
-      </Pressable>
-    </Animated.View>
-  );
+        <View style={styles.downloadItemLeft}>
+          {isPausedItem ? (
+            <Feather name="pause-circle" size={20} color={COLORS.gold} />
+          ) : isError ? (
+            <Feather name="alert-circle" size={20} color={COLORS.primary} />
+          ) : (
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          )}
+          <View style={styles.downloadItemInfo}>
+            <Text style={styles.downloadTitle} numberOfLines={1}>{item.title}</Text>
+            <View style={styles.progressBarBg}>
+              <View
+                style={[
+                  styles.progressBarFill,
+                  { width: `${Math.round(item.progress * 100)}%` },
+                  isPausedItem && { backgroundColor: COLORS.gold },
+                  isError && { backgroundColor: COLORS.primary },
+                ]}
+              />
+            </View>
+            <Text style={styles.downloadMeta}>
+              {isPausedItem ? "Paused" : isError ? "Failed" : `${Math.round(item.progress * 100)}%`} · {formatBytes(item.downloadedBytes)} / {formatBytes(item.totalBytes)}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.downloadActions}>
+          {isPausedItem ? (
+            <Pressable
+              style={styles.cancelBtn}
+              onPress={() => resumeDownload(item.subjectId)}
+              hitSlop={10}
+            >
+              <Feather name="play" size={16} color={COLORS.gold} />
+            </Pressable>
+          ) : item.status === "downloading" ? (
+            <Pressable
+              style={styles.cancelBtn}
+              onPress={() => pauseDownload(item.subjectId)}
+              hitSlop={10}
+            >
+              <Feather name="pause" size={16} color={COLORS.textMuted} />
+            </Pressable>
+          ) : null}
+          <Pressable
+            style={styles.cancelBtn}
+            onPress={() => cancelDownload(item.subjectId)}
+            hitSlop={10}
+          >
+            <Feather name="x" size={16} color={COLORS.textMuted} />
+          </Pressable>
+        </View>
+      </Animated.View>
+    );
+  };
 
   const renderDownloadedItem = ({ item, index }: { item: DownloadedItem; index: number }) => (
     <Animated.View
@@ -630,6 +666,11 @@ const styles = StyleSheet.create({
     height: "100%",
     backgroundColor: COLORS.primary,
     borderRadius: 2,
+  },
+  downloadActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   cancelBtn: {
     width: 28,

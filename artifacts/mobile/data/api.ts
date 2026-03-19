@@ -120,6 +120,7 @@ export async function fetchSearch(query: string): Promise<ApiSubject[]> {
 export interface ApiSourceDownload {
   id: string;
   url: string;
+  proxyUrl: string;
   resolution: number;
   size: string;
 }
@@ -138,13 +139,24 @@ export interface ApiSourcesData {
   captions: ApiCaption[];
 }
 
+function buildProxyUrl(directUrl: string): string {
+  return `${BASE_URL}/download/${encodeURIComponent(directUrl)}`;
+}
+
 export async function fetchSources(movieId: string): Promise<ApiSourcesData | null> {
   try {
     const res = await fetch(`${BASE_URL}/sources/${movieId}`);
     if (!res.ok) return null;
     const json = await res.json();
     if (json.status !== "success") return null;
-    return json.data;
+    const data = json.data;
+    if (data?.downloads) {
+      data.downloads = data.downloads.map((d: any) => ({
+        ...d,
+        proxyUrl: d.proxyUrl || buildProxyUrl(d.url),
+      }));
+    }
+    return data;
   } catch {
     return null;
   }

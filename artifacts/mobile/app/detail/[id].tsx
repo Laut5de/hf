@@ -45,7 +45,7 @@ export default function DetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { isInMyList, addToMyList, removeFromMyList } = useApp();
-  const { isDownloaded, isDownloading, getDownloadProgress, startDownload } = useDownloads();
+  const { isDownloaded, isDownloading, isPaused, getDownloadProgress, startDownload, pauseDownload, resumeDownload, cancelDownload } = useDownloads();
   const [showFullDesc, setShowFullDesc] = useState(false);
   const [selectedSeasonIdx, setSelectedSeasonIdx] = useState(0);
   const [trailerPlaying, setTrailerPlaying] = useState(false);
@@ -185,19 +185,26 @@ export default function DetailScreen() {
 
   const downloaded = isDownloaded(id as string);
   const downloading = isDownloading(id as string);
+  const paused = isPaused(id as string);
   const dlProgress = getDownloadProgress(id as string);
 
   const handleDownload = () => {
-    if (downloaded || downloading) return;
+    if (downloaded) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    startDownload({
-      subjectId: id as string,
-      title,
-      coverUrl: subject.cover?.url || "",
-      coverBlurHash: subject.cover?.blurHash,
-      genre: subject.genre || "",
-      duration: subject.duration || 0,
-    });
+    if (paused) {
+      resumeDownload(id as string);
+    } else if (downloading) {
+      pauseDownload(id as string);
+    } else {
+      startDownload({
+        subjectId: id as string,
+        title,
+        coverUrl: subject.cover?.url || "",
+        coverBlurHash: subject.cover?.blurHash,
+        genre: subject.genre || "",
+        duration: subject.duration || 0,
+      });
+    }
   };
 
   const handleSwitchLanguage = () => {
@@ -352,11 +359,18 @@ export default function DetailScreen() {
               style={[
                 styles.downloadBtn,
                 downloaded && { borderColor: COLORS.success },
+                paused && { borderColor: COLORS.gold },
               ]}
               onPress={handleDownload}
-              disabled={downloading}
             >
-              {downloading ? (
+              {paused ? (
+                <>
+                  <Feather name="play" size={18} color={COLORS.gold} />
+                  <Text style={[styles.downloadBtnText, { color: COLORS.gold }]}>
+                    Resume {Math.round(dlProgress * 100)}%
+                  </Text>
+                </>
+              ) : downloading ? (
                 <>
                   <ActivityIndicator size="small" color={COLORS.primary} />
                   <Text style={styles.downloadBtnText}>

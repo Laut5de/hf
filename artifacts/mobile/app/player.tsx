@@ -124,6 +124,7 @@ export default function PlayerScreen() {
           resolution: 0,
           size: "0",
           url: localPath,
+          proxyUrl: localPath,
         };
         setSelectedQuality(localSource);
         setSources({ downloads: [localSource], captions: [] });
@@ -304,7 +305,7 @@ export default function PlayerScreen() {
 
       <Video
         ref={videoRef}
-        source={{ uri: selectedQuality.url }}
+        source={{ uri: localPath ? selectedQuality.url : (selectedQuality.proxyUrl || selectedQuality.url) }}
         style={styles.video}
         resizeMode={ResizeMode.CONTAIN}
         shouldPlay={isPlaying}

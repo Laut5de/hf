@@ -114,13 +114,17 @@ Expo/React Native mobile streaming app called "JMH STREAM". Dark cinematic theme
 - **My List**: Saves full `ApiSubject` data to AsyncStorage (key: `jmhstream_mylist`)
   - Detail screen "My List" button saves complete media info (poster, title, genre, rating, etc.)
   - Library screen shows saved items with posters, genres, ratings, remove option
-- **Downloads**: Full offline download system using `expo-file-system/legacy` + `expo-sharing`
-  - `context/DownloadContext.tsx` — download manager with progress tracking, pause/cancel, file persistence
+- **Downloads**: Full offline download system using `expo-file-system/legacy` + `expo-sharing` + `expo-media-library` + `expo-task-manager`
+  - `context/DownloadContext.tsx` — download manager with progress tracking, pause/resume/cancel, file persistence
+  - Uses API proxy endpoint `/api/download/:encodedUrl` for all downloads (CDN URLs fail without proxy headers)
+  - `data/api.ts` — `fetchSources` enriches each download source with `proxyUrl` field
   - Downloads stored in app's document directory; metadata persisted to AsyncStorage (`jmhstream_downloads`)
-  - Detail page download button with progress indicator (%), downloaded checkmark state
-  - Library tab has "My List" / "Downloads" toggle — downloads show quality badge, file size, share/delete actions
-  - Player supports local file playback via `localPath` param
+  - Paused downloads persisted to AsyncStorage (`jmhstream_paused_downloads`) with `DownloadResumable` state for resume
+  - Detail page download button with 4 states: default → downloading% → paused/resume → downloaded checkmark
+  - Library tab has "My List" / "Downloads" toggle — active downloads show pause/resume buttons
+  - Player supports local file playback via `localPath` param; streaming also uses proxy URLs
   - Settings respect `downloadOnWifiOnly` and `downloadQuality` (standard=480p, high=720p, ultra=1080p)
+  - Android storage permissions requested via `expo-media-library` before downloads
   - Profile stats show Downloads count + Storage used (real values from downloaded files)
 - **State**: React Query for API data caching (12-hour staleTime + gcTime, persisted to AsyncStorage); AsyncStorage for My List/recent searches
 - **Language Toggle**: Detail page shows English/French toggle when alternate version exists; searches API with `[version française]` tag; navigates to French content's different subjectId
